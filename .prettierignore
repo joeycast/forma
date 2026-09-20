@@ -1,0 +1,8 @@
+node_modules
+dist
+output
+package-lock.json
+packages/core/src/font-metrics.json
+public/fonts
+schema
+public/licenses

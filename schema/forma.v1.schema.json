@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "number",
+      "const": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "type": {
+      "default": "architecture",
+      "type": "string",
+      "enum": [
+        "architecture",
+        "flow"
+      ]
+    },
+    "nodes": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,79}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "kind": {
+            "default": "service",
+            "type": "string",
+            "enum": [
+              "service",
+              "database",
+              "queue",
+              "person",
+              "process",
+              "decision",
+              "client"
+            ]
+          },
+          "group": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,79}$"
+          },
+          "emphasis": {
+            "default": "normal",
+            "type": "string",
+            "enum": [
+              "normal",
+              "primary",
+              "muted"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "emphasis"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "edges": {
+      "maxItems": 600,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,79}$"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,79}$"
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,79}$"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "style": {
+            "default": "solid",
+            "type": "string",
+            "enum": [
+              "solid",
+              "dashed"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "target",
+          "style"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "groups": {
+      "default": [],
+      "maxItems": 40,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,79}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "parent": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,79}$"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "color": {
+            "default": "slate",
+            "type": "string",
+            "enum": [
+              "slate",
+              "blue",
+              "teal",
+              "amber",
+              "violet"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "color"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "layout": {
+      "default": {
+        "direction": "RIGHT",
+        "spacing": "comfortable"
+      },
+      "type": "object",
+      "properties": {
+        "direction": {
+          "default": "RIGHT",
+          "type": "string",
+          "enum": [
+            "RIGHT",
+            "DOWN"
+          ]
+        },
+        "spacing": {
+          "default": "comfortable",
+          "type": "string",
+          "enum": [
+            "comfortable",
+            "compact"
+          ]
+        }
+      },
+      "required": [
+        "direction",
+        "spacing"
+      ],
+      "additionalProperties": false
+    },
+    "presentation": {
+      "default": {
+        "theme": "paper",
+        "nodes": {}
+      },
+      "type": "object",
+      "properties": {
+        "theme": {
+          "default": "paper",
+          "type": "string",
+          "enum": [
+            "paper",
+            "midnight"
+          ]
+        },
+        "nodes": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,79}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "position": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "minimum": -10000,
+                    "maximum": 10000
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": -10000,
+                    "maximum": 10000
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "color": {
+                "type": "string",
+                "enum": [
+                  "slate",
+                  "blue",
+                  "teal",
+                  "amber",
+                  "violet"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "theme",
+        "nodes"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "title",
+    "type",
+    "nodes",
+    "edges",
+    "groups",
+    "layout",
+    "presentation"
+  ],
+  "additionalProperties": false
+}

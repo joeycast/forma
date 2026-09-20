@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "title": "A considered cloud architecture",
+  "description": "From the first request to the last mile. A resilient, event-driven platform.",
+  "type": "architecture",
+  "layout": {
+    "direction": "RIGHT",
+    "spacing": "comfortable"
+  },
+  "nodes": [
+    {
+      "id": "web",
+      "label": "Web application",
+      "description": "The customer experience",
+      "kind": "client",
+      "group": "experience"
+    },
+    {
+      "id": "gateway",
+      "label": "API gateway",
+      "description": "Authenticate \u00b7 route \u00b7 protect",
+      "kind": "service",
+      "group": "services",
+      "emphasis": "primary"
+    },
+    {
+      "id": "orders",
+      "label": "Order service",
+      "description": "Business logic & orchestration",
+      "kind": "service",
+      "group": "services"
+    },
+    {
+      "id": "events",
+      "label": "Event bus",
+      "description": "Decoupled, durable messaging",
+      "kind": "queue",
+      "group": "data"
+    },
+    {
+      "id": "database",
+      "label": "Primary database",
+      "description": "The source of truth",
+      "kind": "database",
+      "group": "data"
+    },
+    {
+      "id": "worker",
+      "label": "Background worker",
+      "description": "Notifications & fulfillment",
+      "kind": "process",
+      "group": "services"
+    }
+  ],
+  "edges": [
+    {
+      "id": "request",
+      "source": "web",
+      "target": "gateway",
+      "label": "HTTPS"
+    },
+    {
+      "id": "route",
+      "source": "gateway",
+      "target": "orders",
+      "label": "REST"
+    },
+    {
+      "id": "publish",
+      "source": "orders",
+      "target": "events",
+      "label": "publish"
+    },
+    {
+      "id": "persist",
+      "source": "orders",
+      "target": "database",
+      "label": "read / write"
+    },
+    {
+      "id": "consume",
+      "source": "worker",
+      "target": "events",
+      "label": "subscribe",
+      "style": "dashed"
+    },
+    {
+      "id": "async",
+      "source": "gateway",
+      "target": "worker",
+      "label": "async",
+      "style": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "experience",
+      "label": "Experience",
+      "color": "slate"
+    },
+    {
+      "id": "services",
+      "label": "Application",
+      "color": "blue"
+    },
+    {
+      "id": "data",
+      "label": "Data & messaging",
+      "color": "teal"
+    }
+  ],
+  "presentation": {
+    "theme": "paper",
+    "nodes": {}
+  }
+}

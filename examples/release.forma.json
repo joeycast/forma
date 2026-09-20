@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "title": "Ship with confidence",
+  "description": "A small, deliberate release process. Every change earns its way to production.",
+  "type": "flow",
+  "layout": { "direction": "RIGHT", "spacing": "comfortable" },
+  "nodes": [
+    {
+      "id": "commit",
+      "label": "Open a pull request",
+      "description": "A focused, reviewable change",
+      "kind": "process"
+    },
+    {
+      "id": "checks",
+      "label": "Run the checks",
+      "description": "Types, tests & security",
+      "kind": "process",
+      "emphasis": "primary"
+    },
+    {
+      "id": "review",
+      "label": "Ready to ship?",
+      "description": "Review and verify",
+      "kind": "decision"
+    },
+    {
+      "id": "deploy",
+      "label": "Deploy to production",
+      "description": "Roll out with observability",
+      "kind": "service"
+    },
+    {
+      "id": "revise",
+      "label": "Refine the change",
+      "description": "Address feedback & retry",
+      "kind": "process"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "commit", "target": "checks" },
+    { "id": "e2", "source": "checks", "target": "review" },
+    { "id": "e3", "source": "review", "target": "deploy", "label": "Approved" },
+    {
+      "id": "e4",
+      "source": "review",
+      "target": "revise",
+      "label": "Needs work",
+      "style": "dashed"
+    },
+    { "id": "e5", "source": "revise", "target": "checks", "label": "Try again", "style": "dashed" }
+  ],
+  "groups": [],
+  "presentation": {
+    "theme": "paper",
+    "nodes": { "deploy": { "color": "teal" }, "revise": { "color": "amber" } }
+  }
+}
