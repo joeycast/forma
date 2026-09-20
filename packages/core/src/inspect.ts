@@ -1,6 +1,6 @@
 import type { Point } from './document';
-import type { Scene, Box } from './scene';
-import { overlaps, segmentCross, segmentHitsBox } from './geometry';
+import type { Scene, Box, SceneNode } from './scene';
+import { overlaps, segmentCross, segmentHitsBox, shapeBoundary } from './geometry';
 import { textWidth } from './text';
 export interface VisualIssue {
   code: string;
@@ -43,8 +43,19 @@ export function inspectScene(scene: Scene) {
         );
     }
   for (const n of nodes) {
+    if (n.style?.fontFamily && n.style.fontFamily !== 'IBM Plex Sans')
+      add(
+        'font-fallback',
+        'warning',
+        'Only IBM Plex Sans is bundled and measured. Other font families may use platform fallback; inspect the export.',
+        [n.id],
+      );
     if (
-      n.titleLines.some((l) => textWidth(l, 16, 600) > n.width - 39) ||
+      n.titleLines.some(
+        (l) =>
+          textWidth(l, n.style?.fontSize ?? 16, n.style?.fontWeight ?? 600) >
+          n.width - 2 * (n.style?.padding ?? 19.5),
+      ) ||
       n.descriptionLines.some((l) => textWidth(l, 12) > n.width - 39)
     )
       add('text-clipping', 'error', 'Text exceeds the measured card width.', [n.id]);
@@ -80,19 +91,26 @@ export function inspectScene(scene: Scene) {
     )
       add('group-heading-clipping', 'error', 'The group heading exceeds its container.', [g.id]);
   for (const edge of edges) {
-    const onBoundary = (p: Point | undefined, b: Box | undefined) =>
+    const onBoundary = (p: Point | undefined, b: SceneNode | undefined) =>
       p &&
       b &&
-      p.x >= b.x - 1 &&
-      p.x <= b.x + b.width + 1 &&
-      p.y >= b.y - 1 &&
-      p.y <= b.y + b.height + 1 &&
-      Math.min(
-        Math.abs(p.x - b.x),
-        Math.abs(p.x - b.x - b.width),
-        Math.abs(p.y - b.y),
-        Math.abs(p.y - b.y - b.height),
-      ) <= 1;
+      (edge.style?.routing === 'straight'
+        ? Math.hypot(
+            p.x - shapeBoundary(b, p, b.style?.shape).x,
+            p.y - shapeBoundary(b, p, b.style?.shape).y,
+          ) < 1.5
+        : p &&
+          b &&
+          p.x >= b.x - 1 &&
+          p.x <= b.x + b.width + 1 &&
+          p.y >= b.y - 1 &&
+          p.y <= b.y + b.height + 1 &&
+          Math.min(
+            Math.abs(p.x - b.x),
+            Math.abs(p.x - b.x - b.width),
+            Math.abs(p.y - b.y),
+            Math.abs(p.y - b.y - b.height),
+          ) <= 1);
     if (
       !onBoundary(
         edge.points[0],
@@ -110,6 +128,7 @@ export function inspectScene(scene: Scene) {
         [edge.id],
       );
     if (
+      edge.style?.routing !== 'straight' &&
       edge.points.some(
         (p, i) =>
           i > 0 &&

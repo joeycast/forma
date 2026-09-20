@@ -1,8 +1,9 @@
+import { resolveNodeStyle, resolveEdgeStyle, resolveGroupStyle } from './resolve-style';
 import type { ElkNode, ElkExtendedEdge, ELK } from 'elkjs';
 import { fingerprint, parseDocument, type Diagram, type Point } from './document';
-import { nodeText, textWidth, wrapText } from './text';
+import { nodeText, styledNodeText, textWidth, wrapText } from './text';
 import type { Box, Scene, SceneEdge, SceneGroup, SceneNode } from './scene';
-import { overlaps, routeBetween, simplify, segmentHitsBox } from './geometry';
+import { overlaps, routeBetween, simplify, segmentHitsBox, shapeBoundary } from './geometry';
 let elkPromise: Promise<ELK> | undefined;
 const groupMinWidth = (label: string) =>
   Math.max(180, Math.ceil(textWidth(label.toUpperCase(), 11, 600) + label.length * 1.2 + 64));
@@ -13,7 +14,19 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
   ));
   const doc = parseDocument(input),
     compact = doc.layout.spacing === 'compact';
-  const measured = new Map(doc.nodes.map((n) => [n.id, nodeText(n.label, n.description)]));
+  const system = doc.presentation.designSystem;
+  const nodeStyles = new Map(doc.nodes.map((n) => [n.id, resolveNodeStyle(doc, n)]));
+  const measured = new Map(
+    doc.nodes.map((n) => {
+      const style = nodeStyles.get(n.id)!;
+      return [
+        n.id,
+        Object.keys(style).length
+          ? styledNodeText(n.label, n.description, style)
+          : nodeText(n.label, n.description),
+      ];
+    }),
+  );
   const buildChildren = (parent?: string): ElkNode[] => [
     ...doc.groups
       .filter((g) => g.parent === parent)
@@ -43,8 +56,10 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
       'elk.direction': doc.layout.direction,
       'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
       'elk.edgeRouting': 'ORTHOGONAL',
-      'elk.spacing.nodeNode': compact ? '32' : '48',
-      'elk.layered.spacing.nodeNodeBetweenLayers': compact ? '56' : '88',
+      'elk.spacing.nodeNode': String(system?.spacing?.node ?? (compact ? 32 : 48)),
+      'elk.layered.spacing.nodeNodeBetweenLayers': String(
+        system?.spacing?.layer ?? (compact ? 56 : 88),
+      ),
       'elk.layered.spacing.edgeNodeBetweenLayers': '28',
       'elk.spacing.edgeNode': '24',
       'elk.spacing.edgeEdge': '16',
@@ -86,6 +101,7 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
           ...measured.get(child.id)!,
           id: child.id,
           semantic,
+          style: nodeStyles.get(child.id),
           accent:
             override?.color ??
             (semantic.emphasis === 'primary'
@@ -98,7 +114,14 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
           pinned: !!override?.position,
         });
       } else {
-        groups.push({ ...box, id: child.id, semantic: groupMap.get(child.id)!, depth });
+        const semantic = groupMap.get(child.id)!;
+        groups.push({
+          ...box,
+          id: child.id,
+          semantic,
+          depth,
+          style: resolveGroupStyle(doc, semantic),
+        });
         walk(child, box.x, box.y, depth + 1);
       }
     }
@@ -153,11 +176,37 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
     box[axis] = mapAxis(box[axis]);
     box[extent] = max - box[axis];
   }
+  if (doc.layout.mode === 'grid') {
+    const columns = new Map<number, number>(),
+      rows = new Map<number, number>();
+    for (const [i, n] of nodes.entries()) {
+      const p = n.semantic.placement ?? {
+        column: doc.nodes.findIndex((item) => item.id === n.id),
+        row: 0,
+      };
+      columns.set(p.column, Math.max(columns.get(p.column) ?? 0, n.width));
+      rows.set(p.row, Math.max(rows.get(p.row) ?? 0, n.height));
+    }
+    const offset = (map: Map<number, number>, index: number, gap: number) =>
+      [...map].filter(([key]) => key < index).reduce((sum, [, size]) => sum + size + gap, 0);
+    for (const [i, n] of nodes.entries()) {
+      const p = n.semantic.placement ?? {
+        column: doc.nodes.findIndex((item) => item.id === n.id),
+        row: 0,
+      };
+      n.x =
+        offset(columns, p.column, system?.spacing?.layer ?? 88) +
+        ((columns.get(p.column) ?? n.width) - n.width) / 2;
+      n.y =
+        offset(rows, p.row, system?.spacing?.node ?? 64) +
+        ((rows.get(p.row) ?? n.height) - n.height) / 2;
+    }
+  }
   for (const n of nodes)
     if (doc.presentation.nodes[n.id]?.position)
       Object.assign(n, doc.presentation.nodes[n.id].position);
   // Bounds follow human-moved descendants, preserving the semantic container.
-  if (nodes.some((n) => n.pinned)) {
+  if (nodes.some((n) => n.pinned) || doc.layout.mode === 'grid') {
     for (const g of [...groups].sort((a, b) => b.depth - a.depth)) {
       const children: Box[] = [
         ...nodes.filter((n) => n.semantic.group === g.id),
@@ -178,6 +227,7 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
     }
   }
   for (const semantic of doc.edges) {
+    const edgeStyle = resolveEdgeStyle(doc, semantic);
     const raw = rawMap.get(semantic.id),
       sections = raw?.edge.sections;
     let points: Point[];
@@ -198,14 +248,22 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
         nodes,
         doc.layout.direction === 'DOWN',
         semantic.source === semantic.target,
+        edgeStyle.sourcePort,
+        edgeStyle.targetPort,
       );
     if (
-      pinned &&
-      (allNodes.get(semantic.source)!.pinned ||
-        allNodes.get(semantic.target)!.pinned ||
-        nodes.some(
-          (n) => n.pinned && points.some((p, i) => i > 0 && segmentHitsBox(points[i - 1], p, n)),
-        ))
+      edgeStyle.sourcePort ||
+      edgeStyle.targetPort ||
+      doc.layout.mode === 'grid' ||
+      [semantic.source, semantic.target].some((id) =>
+        ['diamond', 'ellipse', 'pill'].includes(nodeStyles.get(id)?.shape ?? ''),
+      ) ||
+      (pinned &&
+        (allNodes.get(semantic.source)!.pinned ||
+          allNodes.get(semantic.target)!.pinned ||
+          nodes.some(
+            (n) => n.pinned && points.some((p, i) => i > 0 && segmentHitsBox(points[i - 1], p, n)),
+          )))
     ) {
       points = routeBetween(
         allNodes.get(semantic.source)!,
@@ -213,9 +271,24 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
         nodes,
         doc.layout.direction === 'DOWN',
         semantic.source === semantic.target,
+        edgeStyle.sourcePort,
+        edgeStyle.targetPort,
       );
     }
-    const edge: SceneEdge = { id: semantic.id, semantic, points };
+    const style = edgeStyle;
+    if (style.routing === 'straight') {
+      const source = allNodes.get(semantic.source)!,
+        target = allNodes.get(semantic.target)!;
+      const center = (b: Box) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+      const a = center(source),
+        b = center(target);
+      if (source.id !== target.id)
+        points = [
+          shapeBoundary(source, b, source.style?.shape),
+          shapeBoundary(target, a, target.style?.shape),
+        ];
+    }
+    const edge: SceneEdge = { id: semantic.id, semantic, points, style };
     if (semantic.label) {
       const lines = wrapText(semantic.label, 156, 11),
         width = Math.max(...lines.map((l) => textWidth(l, 11))) + 16,
@@ -271,7 +344,10 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
   const minX = Math.min(0, ...content.map((c) => c.x)),
     minY = Math.min(0, ...content.map((c) => c.y));
   const maxX = Math.max(620, ...content.map((c) => c.x + c.width)),
-    maxY = Math.max(240, ...content.map((c) => c.y + c.height));
+    maxY = Math.max(
+      doc.version === 1 || !nodes.length ? 240 : 0,
+      ...content.map((c) => c.y + c.height),
+    );
   const width = maxX - minX + 112;
   const titleLines = wrapText(doc.title, width - 112, 30, 600),
     descriptionLines = wrapText(doc.description ?? '', width - 112, 13);

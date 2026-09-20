@@ -1,0 +1,138 @@
+{
+  "description": "05 / ROADMAP     Equal spacing denotes phases, not elapsed calendar time.",
+  "edges": [
+    {
+      "id": "discover-prototype",
+      "source": "discover",
+      "style": "solid",
+      "target": "prototype"
+    },
+    {
+      "id": "prototype-build",
+      "source": "prototype",
+      "style": "solid",
+      "target": "build"
+    },
+    {
+      "id": "build-launch",
+      "source": "build",
+      "style": "solid",
+      "target": "launch"
+    }
+  ],
+  "groups": [],
+  "layout": {
+    "direction": "RIGHT",
+    "mode": "grid",
+    "spacing": "comfortable"
+  },
+  "nodes": [
+    {
+      "description": "Weeks 1–2\nInterviews & evidence",
+      "emphasis": "normal",
+      "id": "discover",
+      "kind": "service",
+      "label": "01 / Discover",
+      "placement": {
+        "column": 0,
+        "row": 0
+      }
+    },
+    {
+      "description": "Weeks 3–4\nTest the riskiest idea",
+      "emphasis": "normal",
+      "id": "prototype",
+      "kind": "service",
+      "label": "02 / Prototype",
+      "placement": {
+        "column": 1,
+        "row": 0
+      }
+    },
+    {
+      "description": "Weeks 5–8\nDeliver in small slices",
+      "emphasis": "normal",
+      "id": "build",
+      "kind": "service",
+      "label": "03 / Build",
+      "placement": {
+        "column": 2,
+        "row": 0
+      },
+      "role": "emphasis"
+    },
+    {
+      "description": "Week 9\nMeasure & learn",
+      "emphasis": "normal",
+      "id": "launch",
+      "kind": "service",
+      "label": "04 / Launch",
+      "placement": {
+        "column": 3,
+        "row": 0
+      },
+      "role": "caution"
+    }
+  ],
+  "presentation": {
+    "designSystem": {
+      "canvas": {
+        "background": "#f7f5ef",
+        "border": "#d8ded4",
+        "secondary": "#69736b",
+        "text": "#242c29"
+      },
+      "edge": {
+        "arrowEnd": "filled",
+        "stroke": "#64776a",
+        "strokeWidth": 1.6
+      },
+      "group": {
+        "dash": "solid",
+        "fill": "#eeeee5",
+        "radius": 4,
+        "stroke": "#cdd3c6",
+        "text": "#526849"
+      },
+      "id": "atelier",
+      "name": "Atelier / editorial",
+      "node": {
+        "fill": "#fffef9",
+        "fontFamily": "IBM Plex Sans",
+        "fontSize": 16,
+        "padding": 22,
+        "radius": 2,
+        "secondary": "#657367",
+        "shape": "rect",
+        "stroke": "#c7d0c3",
+        "text": "#243b30",
+        "width": 210
+      },
+      "revision": "1.0.0",
+      "roles": {
+        "caution": {
+          "fill": "#fae4b6",
+          "stroke": "#d8b977"
+        },
+        "emphasis": {
+          "fill": "#dce9b9",
+          "stroke": "#a7be78"
+        },
+        "quiet": {
+          "fill": "#eeeee8",
+          "stroke": "#d0d3c9"
+        }
+      },
+      "spacing": {
+        "layer": 88,
+        "node": 48
+      },
+      "version": 1
+    },
+    "nodes": {},
+    "theme": "paper"
+  },
+  "title": "A deliberate path from discovery to launch",
+  "type": "diagram",
+  "version": 2
+}

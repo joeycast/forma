@@ -13,6 +13,11 @@ import {
 } from 'lucide-react';
 import {
   accents,
+  resolveNodeStyle,
+  resolveEdgeStyle,
+  atelier,
+  signal,
+  type ElementStyle,
   inspectScene,
   type Diagram,
   type Patch,
@@ -177,27 +182,11 @@ export function Inspector({
                   multiline
                   onChange={(description) => patch({ nodes: [{ id: node.id, description }] })}
                 />
-                <label className="field">
-                  Type
-                  <select
-                    value={node.kind}
-                    onChange={(e) => patch({ nodes: [{ id: node.id, kind: e.target.value }] })}
-                  >
-                    {[
-                      'service',
-                      'database',
-                      'queue',
-                      'client',
-                      'person',
-                      'process',
-                      'decision',
-                    ].map((k) => (
-                      <option key={k} value={k}>
-                        {k[0].toUpperCase() + k.slice(1)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <TextField
+                  label="Semantic kind"
+                  value={node.kind}
+                  onChange={(kind) => patch({ nodes: [{ id: node.id, kind }] })}
+                />
                 <label className="field">
                   Group
                   <select
@@ -225,25 +214,39 @@ export function Inspector({
                     <option value="muted">Muted</option>
                   </select>
                 </label>
-                <label className="field">Accent</label>
-                <div className="accent-options">
-                  {Object.entries(accents).map(([key, color]) => (
-                    <button
-                      key={key}
-                      aria-label={`${key} accent`}
-                      title={key}
-                      className={doc.presentation.nodes[node.id]?.color === key ? 'chosen' : ''}
-                      style={{ background: color.ink }}
-                      onClick={() => patch({ overrides: { [node.id]: { color: key as Accent } } })}
-                    />
-                  ))}
-                </div>
-                <button
-                  className="text-button"
-                  onClick={() => patch({ overrides: { [node.id]: { color: null } } })}
-                >
-                  Use group accent
-                </button>
+                {!doc.presentation.designSystem &&
+                  !node.style &&
+                  !doc.presentation.nodes[node.id]?.style && (
+                    <>
+                      <label className="field">Accent</label>
+                      <div className="accent-options">
+                        {Object.entries(accents).map(([key, color]) => (
+                          <button
+                            key={key}
+                            aria-label={`${key} accent`}
+                            title={key}
+                            className={
+                              doc.presentation.nodes[node.id]?.color === key ? 'chosen' : ''
+                            }
+                            style={{ background: color.ink }}
+                            onClick={() =>
+                              patch({ overrides: { [node.id]: { color: key as Accent } } })
+                            }
+                          />
+                        ))}
+                      </div>
+                      <button
+                        className="text-button"
+                        onClick={() => patch({ overrides: { [node.id]: { color: null } } })}
+                      >
+                        Use group accent
+                      </button>
+                    </>
+                  )}
+                <StyleFields
+                  style={resolveNodeStyle(doc, node)}
+                  onChange={(style) => patch({ overrides: { [node.id]: { style } } })}
+                />
                 <div className="position-note">
                   <Pin size={14} />
                   <span>
@@ -302,6 +305,11 @@ export function Inspector({
                     <option value="dashed">Dashed</option>
                   </select>
                 </label>
+                <StyleFields
+                  edge
+                  style={resolveEdgeStyle(doc, edge)}
+                  onChange={(appearance) => patch({ edges: [{ id: edge.id, appearance }] })}
+                />
                 <button className="danger-button" onClick={() => onDelete([edge.id])}>
                   <Trash2 size={14} />
                   Delete connection
@@ -369,7 +377,38 @@ export function Inspector({
               </section>
             )}
             <section>
-              <h3>Theme</h3>
+              <h3>Design system</h3>
+              <label className="field">
+                Visual identity
+                <select
+                  aria-label="Visual identity"
+                  value={doc.presentation.designSystem?.id ?? ''}
+                  onChange={(e) =>
+                    patch({
+                      designSystem:
+                        e.target.value === 'atelier'
+                          ? atelier
+                          : e.target.value === 'signal'
+                            ? signal
+                            : null,
+                    })
+                  }
+                >
+                  <option value="">Classic themes</option>
+                  <option value="atelier">Atelier · editorial</option>
+                  <option value="signal">Signal · technical</option>
+                  {doc.presentation.designSystem &&
+                    !['atelier', 'signal'].includes(doc.presentation.designSystem.id) && (
+                      <option value={doc.presentation.designSystem.id}>
+                        {doc.presentation.designSystem.name}
+                      </option>
+                    )}
+                </select>
+              </label>
+              <p className="help-text">
+                Identity is stored in this file. Element overrides take precedence.
+              </p>
+              <h3>Base theme</h3>
               <div className="theme-options">
                 {(['paper', 'midnight'] as const).map((theme) => (
                   <button
@@ -392,6 +431,18 @@ export function Inspector({
             </section>
             <section>
               <h3>Composition</h3>
+              <label className="field">
+                Arrangement
+                <select
+                  value={doc.layout.mode ?? 'layered'}
+                  onChange={(e) =>
+                    patch({ layout: { mode: e.target.value as 'layered' | 'grid' } })
+                  }
+                >
+                  <option value="layered">Automatic graph</option>
+                  <option value="grid">Composition grid</option>
+                </select>
+              </label>
               <label className="field">Direction</label>
               <div className="segmented">
                 <button
@@ -464,4 +515,84 @@ export function Inspector({
 }
 function MouseTip() {
   return <Crosshair size={19} />;
+}
+
+function StyleFields({
+  style,
+  onChange,
+  edge = false,
+}: {
+  style: ElementStyle;
+  onChange: (style: ElementStyle) => boolean;
+  edge?: boolean;
+}) {
+  return (
+    <details className="style-fields" open>
+      <summary>Appearance</summary>
+      {!edge && (
+        <label className="field">
+          Shape
+          <select
+            value={style.shape ?? 'rect'}
+            onChange={(e) => onChange({ shape: e.target.value as ElementStyle['shape'] })}
+          >
+            {['rect', 'pill', 'diamond', 'ellipse', 'cylinder', 'text'].map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </select>
+        </label>
+      )}
+      {(edge ? ['stroke'] : ['fill', 'stroke', 'text']).map((key) => (
+        <TextField
+          key={key}
+          label={key[0].toUpperCase() + key.slice(1)}
+          value={String(style[key as keyof ElementStyle] ?? '')}
+          onChange={(value) => onChange({ [key]: value })}
+        />
+      ))}
+      <label className="field">
+        Outline
+        <select
+          value={style.dash ?? 'solid'}
+          onChange={(e) => onChange({ dash: e.target.value as ElementStyle['dash'] })}
+        >
+          {['solid', 'dashed', 'dotted'].map((s) => (
+            <option key={s}>{s}</option>
+          ))}
+        </select>
+      </label>
+      {!edge && (
+        <>
+          <TextField
+            label="Font family"
+            value={style.fontFamily ?? 'IBM Plex Sans'}
+            onChange={(fontFamily) => onChange({ fontFamily })}
+          />
+          <TextField
+            label="Font size"
+            value={String(style.fontSize ?? 16)}
+            onChange={(value) => onChange({ fontSize: Number(value) })}
+          />
+          <TextField
+            label="Corner radius"
+            value={String(style.radius ?? 10)}
+            onChange={(value) => onChange({ radius: Number(value) })}
+          />
+        </>
+      )}
+      {edge && (
+        <label className="field">
+          End marker
+          <select
+            value={style.arrowEnd ?? 'open'}
+            onChange={(e) => onChange({ arrowEnd: e.target.value as ElementStyle['arrowEnd'] })}
+          >
+            {['none', 'open', 'filled', 'diamond', 'circle'].map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </select>
+        </label>
+      )}
+    </details>
+  );
 }

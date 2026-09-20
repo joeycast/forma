@@ -6,6 +6,8 @@ import { randomUUID } from 'node:crypto';
 import { Resvg } from '@resvg/resvg-js';
 import {
   parseDocument,
+  migrateDocument,
+  designSystemSchema,
   serializeDocument,
   patchDocument,
   layoutDiagram,
@@ -14,7 +16,17 @@ import {
 } from '../../core/src/index';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
-const commands = ['create', 'validate', 'patch', 'layout', 'render', 'export', 'inspect'];
+const commands = [
+  'create',
+  'validate',
+  'patch',
+  'layout',
+  'render',
+  'export',
+  'inspect',
+  'migrate',
+  'style',
+];
 function output(value: unknown) {
   process.stdout.write(JSON.stringify(value) + '\n');
 }
@@ -37,9 +49,11 @@ async function main() {
   if (!command || command === '--help' || command === 'help') {
     output({
       name: 'forma',
-      version: '0.1.0',
+      version: '0.2.0',
       usage: [
-        'forma create --template architecture|flow --output diagram.forma.json',
+        'forma create [--template architecture|flow|blank] --output diagram.forma.json',
+        'forma migrate diagram.forma.json [--output upgraded.forma.json]',
+        'forma style diagram.forma.json --system brand.json [--output styled.forma.json]',
         'forma validate diagram.forma.json',
         'forma patch diagram.forma.json --patch changes.json [--output diagram.forma.json]',
         'forma layout diagram.forma.json --output scene.json',
@@ -68,21 +82,25 @@ async function main() {
       options.strict = true;
       continue;
     }
-    if (!['--output', '--template', '--patch'].includes(arg))
+    if (!['--output', '--template', '--patch', '--system'].includes(arg))
       throw new Error(`Unknown option: ${arg}`);
     if (!args[i + 1] || args[i + 1].startsWith('--')) throw new Error(`Missing value for ${arg}`);
     options[arg.slice(2)] = args[++i];
   }
   const allowed =
-    command === 'create'
-      ? ['template', 'output']
-      : command === 'patch'
-        ? ['patch', 'output']
-        : command === 'inspect'
-          ? ['strict']
-          : command === 'validate'
-            ? []
-            : ['output'];
+    command === 'style'
+      ? ['system', 'output']
+      : command === 'migrate'
+        ? ['output']
+        : command === 'create'
+          ? ['template', 'output']
+          : command === 'patch'
+            ? ['patch', 'output']
+            : command === 'inspect'
+              ? ['strict']
+              : command === 'validate'
+                ? []
+                : ['output'];
   for (const option of Object.keys(options))
     if (!allowed.includes(option))
       throw new Error(`Option --${option} is not supported by ${command}`);
@@ -96,7 +114,13 @@ async function main() {
   if (['create', 'layout', 'render', 'export'].includes(command) && !target)
     throw new Error('--output is required');
   if (command === 'create') {
-    const template = options.template ?? 'architecture';
+    const template = options.template ?? 'blank';
+    if (template === 'blank') {
+      const doc = parseDocument({ version: 2, title: 'Untitled diagram', nodes: [], edges: [] });
+      await atomic(target!, serializeDocument(doc));
+      output({ ok: true, command, output: resolve(target!), template });
+      return;
+    }
     if (template !== 'architecture' && template !== 'flow')
       throw new Error('Template must be architecture or flow');
     const doc = parseDocument(
@@ -113,6 +137,23 @@ async function main() {
     return;
   }
   const doc = parseDocument(await json(positional[0]));
+  if (command === 'migrate' || command === 'style') {
+    let updated = migrateDocument(doc);
+    if (command === 'style') {
+      if (typeof options.system !== 'string') throw new Error('--system is required');
+      updated = patchDocument(updated, {
+        designSystem: designSystemSchema.parse(await json(options.system)),
+      });
+    }
+    await atomic(target ?? positional[0], serializeDocument(updated));
+    output({
+      ok: true,
+      command,
+      version: updated.version,
+      output: resolve(target ?? positional[0]),
+    });
+    return;
+  }
   if (command === 'validate') {
     output({
       ok: true,

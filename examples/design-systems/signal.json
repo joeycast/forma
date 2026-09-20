@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "id": "signal",
+  "name": "Signal / technical",
+  "revision": "1.0.0",
+  "canvas": {
+    "background": "#101c2e",
+    "text": "#eff6ff",
+    "secondary": "#99b0cb",
+    "border": "#31455f"
+  },
+  "spacing": {
+    "node": 48,
+    "layer": 96
+  },
+  "node": {
+    "shape": "rect",
+    "fill": "#192b43",
+    "stroke": "#3d5877",
+    "text": "#f1f7ff",
+    "secondary": "#a3bad3",
+    "radius": 16,
+    "fontFamily": "IBM Plex Sans",
+    "fontSize": 16,
+    "padding": 22
+  },
+  "edge": {
+    "stroke": "#77b9d2",
+    "strokeWidth": 2,
+    "arrowEnd": "open"
+  },
+  "group": {
+    "fill": "#142238",
+    "stroke": "#344960",
+    "radius": 20,
+    "dash": "dashed",
+    "text": "#9dcfe0"
+  },
+  "roles": {
+    "emphasis": {
+      "fill": "#164857",
+      "stroke": "#50b7bc"
+    },
+    "caution": {
+      "fill": "#56402c",
+      "stroke": "#cf9d60"
+    },
+    "quiet": {
+      "fill": "#1a2739",
+      "stroke": "#344960"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "nodes": [
+    { "id": "verify", "description": "Independent evidence before release" },
+    { "id": "streamA", "description": "Compare alternative approaches" }
+  ],
+  "edges": [{ "id": "verify-release", "label": "Evidence accepted" }]
+}

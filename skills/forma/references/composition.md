@@ -1,11 +1,11 @@
-# Composing diagrams
+# Refine the composition
 
-Architecture diagrams should tell one story: a request path, a deployment boundary, or a data flow. Use groups for actual conceptual boundaries. Start with left-to-right flow, comfortable spacing, short noun labels, and descriptions that clarify responsibilities. Emphasize the component central to the story. Use dashed edges for asynchronous or secondary paths and label protocols only where they help.
+Begin with the sentence the diagram should explain. Keep one dominant reading direction or one explicit center. Groups should express ownership, trust, or a conceptual boundary; avoid a container around every object.
 
-Process diagrams should show the normal path clearly. Use verb phrases, decision nodes for branching, and concise edge labels that identify outcomes. A return edge is useful when it communicates an actual feedback loop; many backward edges usually mean the story should be split into smaller diagrams.
+Use automatic layout for relationships, a grid when relative rows/columns communicate meaning, and explicit human pins for exceptions. Prefer a shared design system and a few semantic roles over repeated element styling. A familiar diagram skill can accelerate this; an unfamiliar explanation can use the same primitives directly.
 
-Before delivery, inspect the SVG at a useful display size. Check title hierarchy, legibility, group boundaries, whitespace, edge-label separation, and visual balance. Machine inspection reports geometric symptoms, not artistic approval. Warnings are leads to investigate, not instructions to delete meaningful connections.
+Before delivery, view the render at a useful reading size. Check title hierarchy, label legibility, balanced whitespace, group headings, connector attachment, and the distinction between primary and secondary information. Check fixed-color overrides under every intended identity; changing a background may require an explicit foreground too. Machine inspection reports symptoms, not aesthetic approval. Do not delete meaningful edges to silence warnings.
 
-If a human pin creates a collision after adding content, first preserve that pin and improve the surrounding structure or spacing. A deliberate position can be cleared with `{"overrides":{"nodeId":{"position":null}}}` when returning that node to automatic layout is appropriate. Do not clear all overrides as a routine fix.
+Preserve human pins while improving surrounding spacing or structure. Clear only a deliberate position with `{"overrides":{"nodeId":{"position":null}}}` when returning that node to automatic layout is appropriate. Do not clear all overrides as a routine fix.
 
-Prefer fewer nodes and a focused narrative over tiny text or a dense tangle. The MVP supports architecture and process flows, not arbitrary illustration. Export SVG for scalable graphics; PNG for destinations that cannot display SVG. Always retain the native document for future edits.
+Favor focused views over tiny text. Use SVG for scalable graphics and PNG for destinations that need raster output. Always retain the native document for future human and agent edits.

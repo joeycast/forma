@@ -2,7 +2,23 @@ import { useCallback, useEffect, useState } from 'react';
 import { parseDocument, serializeDocument, type Diagram } from '../../../packages/core/src';
 import platform from '../../../examples/platform.forma.json';
 import release from '../../../examples/release.forma.json';
+import architecture from '../../../examples/gallery/architecture.forma.json';
+import decision from '../../../examples/gallery/decision.forma.json';
+import organization from '../../../examples/gallery/organization.forma.json';
+import entities from '../../../examples/gallery/entities.forma.json';
+import timeline from '../../../examples/gallery/timeline.forma.json';
+import mindmap from '../../../examples/gallery/mindmap.forma.json';
+import development from '../../../examples/gallery/development.forma.json';
 export const templates = { architecture: parseDocument(platform), flow: parseDocument(release) };
+export const gallery = {
+  architecture: parseDocument(architecture),
+  decision: parseDocument(decision),
+  organization: parseDocument(organization),
+  entities: parseDocument(entities),
+  timeline: parseDocument(timeline),
+  mindmap: parseDocument(mindmap),
+  development: parseDocument(development),
+};
 const KEY = 'forma.document.v1';
 export function useDocument() {
   const [initial] = useState(() => {

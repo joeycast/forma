@@ -5,3 +5,7 @@ export * from './inspect';
 export * from './render';
 export * from './theme';
 export * from './geometry';
+
+export * from './styles';
+
+export * from './resolve-style';

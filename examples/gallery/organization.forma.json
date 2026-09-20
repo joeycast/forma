@@ -1,0 +1,151 @@
+{
+  "description": "03 / ORGANIZATION     Reporting lines show accountability; descriptions show the work.",
+  "edges": [
+    {
+      "id": "head-design",
+      "source": "head",
+      "style": "solid",
+      "target": "design"
+    },
+    {
+      "id": "head-eng",
+      "source": "head",
+      "style": "solid",
+      "target": "eng"
+    },
+    {
+      "id": "design-designers",
+      "source": "design",
+      "style": "solid",
+      "target": "designers"
+    },
+    {
+      "id": "eng-platform",
+      "source": "eng",
+      "style": "solid",
+      "target": "platform"
+    },
+    {
+      "id": "eng-product",
+      "source": "eng",
+      "style": "solid",
+      "target": "product"
+    }
+  ],
+  "groups": [],
+  "layout": {
+    "direction": "DOWN",
+    "spacing": "comfortable"
+  },
+  "nodes": [
+    {
+      "description": "Product & engineering",
+      "emphasis": "normal",
+      "id": "head",
+      "kind": "service",
+      "label": "Head of product",
+      "role": "emphasis",
+      "style": {
+        "width": 240
+      }
+    },
+    {
+      "description": "Research · interaction",
+      "emphasis": "normal",
+      "id": "design",
+      "kind": "service",
+      "label": "Design lead"
+    },
+    {
+      "description": "Delivery · reliability",
+      "emphasis": "normal",
+      "id": "eng",
+      "kind": "service",
+      "label": "Engineering lead"
+    },
+    {
+      "description": "Experience quality",
+      "emphasis": "normal",
+      "id": "designers",
+      "kind": "service",
+      "label": "Product designers",
+      "role": "quiet"
+    },
+    {
+      "description": "Shared infrastructure",
+      "emphasis": "normal",
+      "id": "platform",
+      "kind": "service",
+      "label": "Platform team",
+      "role": "quiet"
+    },
+    {
+      "description": "Customer outcomes",
+      "emphasis": "normal",
+      "id": "product",
+      "kind": "service",
+      "label": "Product team",
+      "role": "quiet"
+    }
+  ],
+  "presentation": {
+    "designSystem": {
+      "canvas": {
+        "background": "#f7f5ef",
+        "border": "#d8ded4",
+        "secondary": "#69736b",
+        "text": "#242c29"
+      },
+      "edge": {
+        "arrowEnd": "none",
+        "stroke": "#64776a",
+        "strokeWidth": 1.6
+      },
+      "group": {
+        "dash": "solid",
+        "fill": "#eeeee5",
+        "radius": 4,
+        "stroke": "#cdd3c6",
+        "text": "#526849"
+      },
+      "id": "atelier",
+      "name": "Atelier / editorial",
+      "node": {
+        "fill": "#fffef9",
+        "fontFamily": "IBM Plex Sans",
+        "fontSize": 16,
+        "padding": 22,
+        "radius": 2,
+        "secondary": "#657367",
+        "shape": "rect",
+        "stroke": "#c7d0c3",
+        "text": "#243b30"
+      },
+      "revision": "1.0.0",
+      "roles": {
+        "caution": {
+          "fill": "#fae4b6",
+          "stroke": "#d8b977"
+        },
+        "emphasis": {
+          "fill": "#dce9b9",
+          "stroke": "#a7be78"
+        },
+        "quiet": {
+          "fill": "#eeeee8",
+          "stroke": "#d0d3c9"
+        }
+      },
+      "spacing": {
+        "layer": 80,
+        "node": 44
+      },
+      "version": 1
+    },
+    "nodes": {},
+    "theme": "paper"
+  },
+  "title": "A small team with explicit ownership",
+  "type": "diagram",
+  "version": 2
+}

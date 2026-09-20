@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "id": "atelier",
+  "name": "Atelier / editorial",
+  "revision": "1.0.0",
+  "canvas": {
+    "background": "#f7f5ef",
+    "text": "#242c29",
+    "secondary": "#69736b",
+    "border": "#d8ded4"
+  },
+  "spacing": {
+    "node": 44,
+    "layer": 80
+  },
+  "node": {
+    "shape": "rect",
+    "fill": "#fffef9",
+    "stroke": "#c7d0c3",
+    "text": "#243b30",
+    "secondary": "#657367",
+    "radius": 2,
+    "fontFamily": "IBM Plex Sans",
+    "fontSize": 16,
+    "padding": 22
+  },
+  "edge": {
+    "stroke": "#64776a",
+    "strokeWidth": 1.6,
+    "arrowEnd": "filled"
+  },
+  "group": {
+    "fill": "#eeeee5",
+    "stroke": "#cdd3c6",
+    "radius": 4,
+    "dash": "solid",
+    "text": "#526849"
+  },
+  "roles": {
+    "emphasis": {
+      "fill": "#dce9b9",
+      "stroke": "#a7be78"
+    },
+    "caution": {
+      "fill": "#fae4b6",
+      "stroke": "#d8b977"
+    },
+    "quiet": {
+      "fill": "#eeeee8",
+      "stroke": "#d0d3c9"
+    }
+  }
+}

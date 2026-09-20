@@ -26,7 +26,24 @@ export function segmentHitsBox(a: Point, b: Point, box: Box) {
       Math.max(a.x, b.x) > box.x &&
       Math.min(a.x, b.x) < box.x + box.width
     );
-  return false;
+  // Slab intersection, excluding touches along the box border.
+  let low = 0,
+    high = 1;
+  for (const [origin, delta, min, max] of [
+    [a.x, b.x - a.x, box.x + 0.01, box.x + box.width - 0.01],
+    [a.y, b.y - a.y, box.y + 0.01, box.y + box.height - 0.01],
+  ]) {
+    if (!delta) {
+      if (origin < min || origin > max) return false;
+      continue;
+    }
+    const one = (min - origin) / delta,
+      two = (max - origin) / delta;
+    low = Math.max(low, Math.min(one, two));
+    high = Math.min(high, Math.max(one, two));
+    if (low > high) return false;
+  }
+  return low < high;
 }
 export function segmentCross(a: Point, b: Point, c: Point, d: Point): Point | null {
   const cross = (u: Point, v: Point) => u.x * v.y - u.y * v.x;
@@ -71,6 +88,8 @@ export function routeBetween(
   obstacles: Box[],
   down: boolean,
   self = false,
+  sourcePort?: 'top' | 'right' | 'bottom' | 'left',
+  targetPort?: 'top' | 'right' | 'bottom' | 'left',
 ): Point[] {
   if (self)
     return [
@@ -80,14 +99,20 @@ export function routeBetween(
       { x: source.x + source.width * 0.6, y: source.y - 28 },
       { x: source.x + source.width * 0.6, y: source.y },
     ];
-  const a = down
-    ? { x: source.x + source.width / 2, y: source.y + source.height }
-    : { x: source.x + source.width, y: source.y + source.height / 2 };
-  const b = down
-    ? { x: target.x + target.width / 2, y: target.y }
-    : { x: target.x, y: target.y + target.height / 2 };
-  const start = { x: a.x + (down ? 0 : 20), y: a.y + (down ? 20 : 0) };
-  const end = { x: b.x - (down ? 0 : 20), y: b.y - (down ? 20 : 0) };
+  const port = (box: Box, side: string) => ({
+    x: box.x + (side === 'left' ? 0 : side === 'right' ? box.width : box.width / 2),
+    y: box.y + (side === 'top' ? 0 : side === 'bottom' ? box.height : box.height / 2),
+  });
+  const startSide = sourcePort ?? (down ? 'bottom' : 'right'),
+    endSide = targetPort ?? (down ? 'top' : 'left');
+  const a = port(source, startSide),
+    b = port(target, endSide);
+  const stub = (point: Point, side: string) => ({
+    x: point.x + (side === 'left' ? -20 : side === 'right' ? 20 : 0),
+    y: point.y + (side === 'top' ? -20 : side === 'bottom' ? 20 : 0),
+  });
+  const start = stub(a, startSide),
+    end = stub(b, endSide);
   const boxes = obstacles.map((o) => ({
     x: o.x - 12,
     y: o.y - 12,
@@ -181,4 +206,22 @@ export function routeBetween(
     path.push({ x: xs[i % width], y: ys[Math.floor(i / width)] });
   }
   return simplify([a, ...path.reverse(), b]);
+}
+
+/** Ray from shape center to an exterior point, used for direct connectors. */
+export function shapeBoundary(box: Box, toward: Point, shape = 'rect'): Point {
+  const x = box.x + box.width / 2,
+    y = box.y + box.height / 2,
+    dx = toward.x - x,
+    dy = toward.y - y;
+  if (!dx && !dy) return { x: box.x + box.width, y };
+  const nx = Math.abs(dx) / (box.width / 2),
+    ny = Math.abs(dy) / (box.height / 2);
+  const scale =
+    shape === 'ellipse'
+      ? 1 / Math.hypot(nx, ny)
+      : shape === 'diamond'
+        ? 1 / (nx + ny)
+        : 1 / Math.max(nx, ny);
+  return { x: x + dx * scale, y: y + dy * scale };
 }

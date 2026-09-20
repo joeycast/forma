@@ -14,4 +14,4 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run format:check
-      - run: npm run schema && git diff --exit-code -- schema/forma.v1.schema.json
+      - run: npm run schema && git diff --exit-code -- schema/

@@ -1,0 +1,182 @@
+{
+  "description": "02 / DECISIONS     Keep the happy path direct. Make the exception legible.",
+  "edges": [
+    {
+      "id": "change-checks",
+      "source": "change",
+      "style": "solid",
+      "target": "checks"
+    },
+    {
+      "id": "checks-gate",
+      "source": "checks",
+      "style": "solid",
+      "target": "gate"
+    },
+    {
+      "id": "gate-ship",
+      "label": "Yes",
+      "source": "gate",
+      "style": "solid",
+      "target": "ship"
+    },
+    {
+      "appearance": {
+        "sourcePort": "right",
+        "targetPort": "left"
+      },
+      "id": "gate-revise",
+      "label": "No",
+      "source": "gate",
+      "style": "solid",
+      "target": "revise"
+    },
+    {
+      "appearance": {
+        "sourcePort": "top",
+        "targetPort": "right"
+      },
+      "id": "revise-checks",
+      "label": "Retry",
+      "source": "revise",
+      "style": "dashed",
+      "target": "checks"
+    }
+  ],
+  "groups": [],
+  "layout": {
+    "direction": "DOWN",
+    "mode": "grid",
+    "spacing": "comfortable"
+  },
+  "nodes": [
+    {
+      "description": "Small, reviewable increment",
+      "emphasis": "normal",
+      "id": "change",
+      "kind": "service",
+      "label": "Proposed change",
+      "placement": {
+        "column": 0,
+        "row": 0
+      },
+      "role": "quiet",
+      "style": {
+        "shape": "pill"
+      }
+    },
+    {
+      "description": "Tests · security · compatibility",
+      "emphasis": "normal",
+      "id": "checks",
+      "kind": "service",
+      "label": "Run quality checks",
+      "placement": {
+        "column": 0,
+        "row": 1
+      }
+    },
+    {
+      "description": "",
+      "emphasis": "normal",
+      "id": "gate",
+      "kind": "service",
+      "label": "Ready to ship?",
+      "placement": {
+        "column": 0,
+        "row": 2
+      },
+      "role": "caution",
+      "style": {
+        "shape": "diamond",
+        "width": 220
+      }
+    },
+    {
+      "description": "Observe the rollout",
+      "emphasis": "normal",
+      "id": "ship",
+      "kind": "service",
+      "label": "Deploy safely",
+      "placement": {
+        "column": 0,
+        "row": 3
+      },
+      "role": "emphasis",
+      "style": {
+        "shape": "pill"
+      }
+    },
+    {
+      "description": "Use feedback to reduce uncertainty",
+      "emphasis": "normal",
+      "id": "revise",
+      "kind": "service",
+      "label": "Revise the change",
+      "placement": {
+        "column": 1,
+        "row": 2
+      }
+    }
+  ],
+  "presentation": {
+    "designSystem": {
+      "canvas": {
+        "background": "#f7f5ef",
+        "border": "#d8ded4",
+        "secondary": "#69736b",
+        "text": "#242c29"
+      },
+      "edge": {
+        "arrowEnd": "filled",
+        "stroke": "#64776a",
+        "strokeWidth": 1.6
+      },
+      "group": {
+        "dash": "solid",
+        "fill": "#eeeee5",
+        "radius": 4,
+        "stroke": "#cdd3c6",
+        "text": "#526849"
+      },
+      "id": "atelier",
+      "name": "Atelier / editorial",
+      "node": {
+        "fill": "#fffef9",
+        "fontFamily": "IBM Plex Sans",
+        "fontSize": 16,
+        "padding": 22,
+        "radius": 2,
+        "secondary": "#657367",
+        "shape": "rect",
+        "stroke": "#c7d0c3",
+        "text": "#243b30"
+      },
+      "revision": "1.0.0",
+      "roles": {
+        "caution": {
+          "fill": "#fae4b6",
+          "stroke": "#d8b977"
+        },
+        "emphasis": {
+          "fill": "#dce9b9",
+          "stroke": "#a7be78"
+        },
+        "quiet": {
+          "fill": "#eeeee8",
+          "stroke": "#d0d3c9"
+        }
+      },
+      "spacing": {
+        "layer": 80,
+        "node": 44
+      },
+      "version": 1
+    },
+    "nodes": {},
+    "theme": "paper"
+  },
+  "title": "Every release earns its way to production",
+  "type": "diagram",
+  "version": 2
+}

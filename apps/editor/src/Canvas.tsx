@@ -111,7 +111,7 @@ export function Canvas({
           width: b.width,
           height: b.height,
           viewBox: `${b.x} ${b.y} ${b.width} ${b.height}`,
-          markup: `<rect x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}" rx="0" fill="${theme === 'paper' ? '#fff' : '#171e2b'}"/>${frameMarkup(scene)}`,
+          markup: `<rect x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}" rx="0" fill="${scene.document.presentation.designSystem?.canvas?.background ?? (theme === 'paper' ? '#fff' : '#171e2b')}"/>${frameMarkup(scene)}`,
         },
         draggable: false,
         selectable: false,
@@ -182,9 +182,14 @@ export function Canvas({
     <div className={`canvas ${grid ? '' : 'no-grid'}`}>
       <div className="canvas-tag">
         <span className="sheet-dot" />{' '}
-        {scene.document.type === 'architecture' ? 'Architecture' : 'Process flow'}{' '}
+        {scene.document.type === 'architecture'
+          ? 'Architecture'
+          : scene.document.type === 'flow'
+            ? 'Process flow'
+            : 'Diagram'}{' '}
         <span className="canvas-tag-divider" />{' '}
-        {scene.document.presentation.theme === 'paper' ? 'Paper' : 'Midnight'}
+        {scene.document.presentation.designSystem?.name ??
+          (scene.document.presentation.theme === 'paper' ? 'Paper' : 'Midnight')}
       </div>
       <ReactFlow
         nodes={nodes}

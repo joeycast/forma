@@ -1797,3 +1797,24 @@ p {
     display: inline;
   }
 }
+
+.gallery-starters {
+  margin: 20px 0;
+}
+.gallery-starter-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.gallery-starters p {
+  font-size: 12px;
+}
+.style-fields {
+  margin: 16px 0;
+}
+.style-fields summary {
+  font-weight: 600;
+  margin-bottom: 12px;
+  cursor: pointer;
+}

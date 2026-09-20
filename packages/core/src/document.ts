@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { elementStyleSchema, designSystemSchema } from './styles';
 
 const id = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,79}$/);
 const text = z.string().max(2000);
@@ -14,9 +15,13 @@ export const nodeSchema = z
     id,
     label: z.string().min(1).max(240),
     description: text.optional(),
-    kind: z
-      .enum(['service', 'database', 'queue', 'person', 'process', 'decision', 'client'])
-      .default('service'),
+    kind: z.string().min(1).max(80).default('service'),
+    role: id.optional(),
+    style: elementStyleSchema.optional(),
+    placement: z
+      .object({ column: z.number().int().min(0).max(50), row: z.number().int().min(0).max(50) })
+      .strict()
+      .optional(),
     group: id.optional(),
     emphasis: z.enum(['normal', 'primary', 'muted']).default('normal'),
   })
@@ -28,6 +33,8 @@ export const edgeSchema = z
     target: id,
     label: z.string().max(120).optional(),
     style: z.enum(['solid', 'dashed']).default('solid'),
+    role: id.optional(),
+    appearance: elementStyleSchema.optional(),
   })
   .strict();
 export const groupSchema = z
@@ -35,21 +42,24 @@ export const groupSchema = z
     id,
     label: z.string().min(1).max(120),
     parent: id.optional(),
+    role: id.optional(),
+    style: elementStyleSchema.optional(),
     description: text.optional(),
     color: color.default('slate'),
   })
   .strict();
 export const documentSchema = z
   .object({
-    version: z.literal(1),
+    version: z.union([z.literal(1), z.literal(2)]),
     title: z.string().min(1).max(200),
     description: text.optional(),
-    type: z.enum(['architecture', 'flow']).default('architecture'),
+    type: z.string().min(1).max(80).default('diagram'),
     nodes: z.array(nodeSchema).max(200),
     edges: z.array(edgeSchema).max(600),
     groups: z.array(groupSchema).max(40).default([]),
     layout: z
       .object({
+        mode: z.enum(['layered', 'grid']).optional(),
         direction: z.enum(['RIGHT', 'DOWN']).default('RIGHT'),
         spacing: z.enum(['comfortable', 'compact']).default('comfortable'),
       })
@@ -58,8 +68,18 @@ export const documentSchema = z
     presentation: z
       .object({
         theme: z.enum(['paper', 'midnight']).default('paper'),
+        designSystem: designSystemSchema.optional(),
         nodes: z
-          .record(id, z.object({ position: position.optional(), color: color.optional() }).strict())
+          .record(
+            id,
+            z
+              .object({
+                position: position.optional(),
+                color: color.optional(),
+                style: elementStyleSchema.optional(),
+              })
+              .strict(),
+          )
           .default({}),
       })
       .strict()
@@ -80,13 +100,35 @@ export class DocumentError extends Error {
   }
 }
 export function parseDocument(input: unknown): Diagram {
-  const result = documentSchema.safeParse(input);
+  const source =
+    input &&
+    typeof input === 'object' &&
+    (input as Record<string, unknown>).version === 1 &&
+    !('type' in input)
+      ? { ...input, type: 'architecture' }
+      : input;
+  const result = documentSchema.safeParse(source);
   if (!result.success)
     throw new DocumentError(
       result.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
     );
   const doc = result.data;
   const issues: { path: string; message: string }[] = [];
+  if (doc.version === 1 && hasV2Features(doc))
+    issues.push({
+      path: 'version',
+      message: 'General composition and styles require version 2. Use forma migrate.',
+    });
+  if (doc.layout.mode === 'grid') {
+    const cells = new Set<string>();
+    for (const [i, n] of doc.nodes.entries()) {
+      const p = n.placement ?? { column: i, row: 0 };
+      const cell = `${p.column}:${p.row}`;
+      if (cells.has(cell))
+        issues.push({ path: `nodes.${n.id}.placement`, message: 'Grid cell already occupied' });
+      cells.add(cell);
+    }
+  }
   const seen = new Set<string>();
   for (const [collection, values] of Object.entries({
     nodes: doc.nodes,
@@ -147,17 +189,23 @@ export const patchSchema = z
       .optional(),
     layout: z
       .object({
+        mode: z.enum(['layered', 'grid']).optional(),
         direction: z.enum(['RIGHT', 'DOWN']).optional(),
         spacing: z.enum(['comfortable', 'compact']).optional(),
       })
       .strict()
       .optional(),
     theme: z.enum(['paper', 'midnight']).optional(),
+    designSystem: designSystemSchema.nullable().optional(),
     overrides: z
       .record(
         id,
         z
-          .object({ position: position.nullable().optional(), color: color.nullable().optional() })
+          .object({
+            position: position.nullable().optional(),
+            color: color.nullable().optional(),
+            style: elementStyleSchema.nullable().optional(),
+          })
           .strict()
           .nullable(),
       )
@@ -173,9 +221,19 @@ export function patchDocument(input: Diagram, raw: unknown): Diagram {
   if (patch.description !== undefined) doc.description = patch.description;
   if (patch.layout) Object.assign(doc.layout, patch.layout);
   if (patch.theme) doc.presentation.theme = patch.theme;
+  if (patch.designSystem === null) delete doc.presentation.designSystem;
+  else if (patch.designSystem) doc.presentation.designSystem = patch.designSystem;
   for (const key of ['nodes', 'edges', 'groups'] as const) {
     const map = new Map<string, Record<string, unknown>>(doc[key].map((n) => [n.id, { ...n }]));
-    for (const item of patch[key] ?? []) map.set(item.id, { ...map.get(item.id), ...item });
+    for (const item of patch[key] ?? []) {
+      const prior = map.get(item.id);
+      const next = { ...prior, ...item };
+      for (const field of ['style', 'appearance'] as const) {
+        if (item[field] && typeof item[field] === 'object')
+          next[field] = { ...((prior?.[field] as object) ?? {}), ...(item[field] as object) };
+      }
+      map.set(item.id, next);
+    }
     for (const keyToRemove of patch.remove?.[key] ?? []) map.delete(keyToRemove);
     (doc[key] as unknown) = [...map.values()];
   }
@@ -193,11 +251,12 @@ export function patchDocument(input: Diagram, raw: unknown): Diagram {
     const merged: Record<string, unknown> = { ...doc.presentation.nodes[key] };
     for (const [k, v] of Object.entries(value)) {
       if (v === null) delete merged[k];
-      else merged[k] = v;
+      else merged[k] = k === 'style' ? { ...((merged[k] as object) ?? {}), ...(v as object) } : v;
     }
     if (Object.keys(merged).length) doc.presentation.nodes[key] = merged as NodeOverride;
     else delete doc.presentation.nodes[key];
   }
+  if (hasV2Features(doc)) doc.version = 2;
   return parseDocument(doc);
 }
 function stable(value: unknown): unknown {
@@ -217,4 +276,29 @@ export function fingerprint(doc: Diagram): string {
   let hash = 2166136261;
   for (const ch of serializeDocument(doc)) hash = Math.imul(hash ^ ch.charCodeAt(0), 16777619);
   return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function hasV2Features(doc: Diagram): boolean {
+  return !!(
+    !['architecture', 'flow'].includes(doc.type) ||
+    doc.presentation.designSystem ||
+    doc.layout.mode ||
+    doc.nodes.some(
+      (n) =>
+        n.style ||
+        n.role ||
+        n.placement ||
+        !['service', 'database', 'queue', 'person', 'process', 'decision', 'client'].includes(
+          n.kind,
+        ),
+    ) ||
+    doc.edges.some((e) => e.appearance || e.role) ||
+    doc.groups.some((g) => g.style || g.role) ||
+    Object.values(doc.presentation.nodes).some((n) => n.style)
+  );
+}
+/** Explicit, lossless upgrade. v1 files remain v1 until migration or use of a v2 feature. */
+export function migrateDocument(input: unknown): Diagram {
+  const doc = parseDocument(input);
+  return parseDocument({ ...doc, version: 2 });
 }

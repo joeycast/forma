@@ -53,7 +53,7 @@ function sound(scene: Scene) {
 
 test('schema rejects unsupported versions, duplicate IDs and all dangling references', () => {
   for (const value of [
-    { version: 2 },
+    { version: 99 },
     {
       nodes: [
         { id: 'a', label: 'A' },

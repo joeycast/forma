@@ -247,7 +247,7 @@ export function App() {
   const quality = scene ? inspectScene(scene) : null;
   const matches = (label: string) => label.toLowerCase().includes(search.toLowerCase());
   const renderNode = (n: DiagramNode, indented = false) => {
-    const Icon = kindIcons[n.kind];
+    const Icon = kindIcons[n.kind as keyof typeof kindIcons] ?? kindIcons.service;
     return (
       <button
         key={n.id}
@@ -382,7 +382,11 @@ export function App() {
               </span>
               <span>
                 <strong>
-                  {doc.type === 'architecture' ? 'System architecture' : 'Process flow'}
+                  {doc.type === 'architecture'
+                    ? 'System architecture'
+                    : doc.type === 'flow'
+                      ? 'Process flow'
+                      : 'Diagram'}
                 </strong>
                 <small>Forma document</small>
               </span>

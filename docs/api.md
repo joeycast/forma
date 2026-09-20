@@ -33,3 +33,9 @@ const nativeJSON = serializeDocument(updated);
 Adapters should read native documents, invoke the core, then write documents or derived exports. They should not store editor-specific state as the canonical format. The browser editor may keep transient viewport/selection state separately; only meaningful document edits belong in version control.
 
 Future exporters should accept `Scene` plus its embedded semantic document. Geometry is available without scraping SVG. This is the intended path for editable draw.io, VSDX, and PowerPoint shapes and connectors. Version those exporters independently of the native schema. External tool protocols, including MCP, can wrap this API or the CLI without affecting the core.
+
+## General composition and design systems
+
+`migrateDocument(unknown)` validates and losslessly upgrades a v1 document to v2. `designSystemSchema.parse(unknown)` validates standalone visual identities; `atelier` and `signal` are bundled examples. Apply one with `patchDocument(doc, {designSystem: system})`. The style cascade is resolved into each scene element's `style`, so adapters can consume editable geometry and resolved appearance directly.
+
+Set `layout.mode: 'grid'` and node `placement: {column,row}` for intentional relative composition. Otherwise ELK infers layered positions. Both paths respect human pins and use the same typography, group bounds, routing, label placement, inspector, and renderer. See [the native format](format.md) for the style vocabulary and context-specific property behavior.

@@ -1,0 +1,178 @@
+{
+  "description": "01 / SYSTEMS     A focused view of the checkout path and its asynchronous work.",
+  "edges": [
+    {
+      "id": "customer-storefront",
+      "source": "customer",
+      "style": "solid",
+      "target": "storefront"
+    },
+    {
+      "id": "storefront-api",
+      "label": "HTTPS",
+      "source": "storefront",
+      "style": "solid",
+      "target": "api"
+    },
+    {
+      "id": "api-orders",
+      "label": "write",
+      "source": "api",
+      "style": "solid",
+      "target": "orders"
+    },
+    {
+      "id": "api-events",
+      "label": "publish",
+      "source": "api",
+      "style": "solid",
+      "target": "events"
+    },
+    {
+      "id": "events-fulfillment",
+      "label": "consume",
+      "source": "events",
+      "style": "solid",
+      "target": "fulfillment"
+    }
+  ],
+  "groups": [
+    {
+      "color": "slate",
+      "id": "experience",
+      "label": "Customer experience"
+    },
+    {
+      "color": "slate",
+      "id": "services",
+      "label": "Application services"
+    },
+    {
+      "color": "slate",
+      "id": "data",
+      "label": "Persistence"
+    }
+  ],
+  "layout": {
+    "direction": "RIGHT",
+    "spacing": "comfortable"
+  },
+  "nodes": [
+    {
+      "description": "Browses and buys",
+      "emphasis": "normal",
+      "group": "experience",
+      "id": "customer",
+      "kind": "person",
+      "label": "Customer",
+      "role": "emphasis",
+      "style": {
+        "shape": "pill"
+      }
+    },
+    {
+      "description": "Web application",
+      "emphasis": "normal",
+      "group": "experience",
+      "id": "storefront",
+      "kind": "service",
+      "label": "Storefront"
+    },
+    {
+      "description": "Owns the purchase boundary",
+      "emphasis": "normal",
+      "group": "services",
+      "id": "api",
+      "kind": "service",
+      "label": "Checkout API",
+      "role": "emphasis"
+    },
+    {
+      "description": "Durable purchase records",
+      "emphasis": "normal",
+      "group": "data",
+      "id": "orders",
+      "kind": "database",
+      "label": "Order store",
+      "style": {
+        "shape": "cylinder"
+      }
+    },
+    {
+      "description": "Order placed",
+      "emphasis": "normal",
+      "group": "data",
+      "id": "events",
+      "kind": "queue",
+      "label": "Event queue"
+    },
+    {
+      "description": "Asynchronous processing",
+      "emphasis": "normal",
+      "group": "services",
+      "id": "fulfillment",
+      "kind": "service",
+      "label": "Fulfillment"
+    }
+  ],
+  "presentation": {
+    "designSystem": {
+      "canvas": {
+        "background": "#f7f5ef",
+        "border": "#d8ded4",
+        "secondary": "#69736b",
+        "text": "#242c29"
+      },
+      "edge": {
+        "arrowEnd": "filled",
+        "stroke": "#64776a",
+        "strokeWidth": 1.6
+      },
+      "group": {
+        "dash": "solid",
+        "fill": "#eeeee5",
+        "radius": 4,
+        "stroke": "#cdd3c6",
+        "text": "#526849"
+      },
+      "id": "atelier",
+      "name": "Atelier / editorial",
+      "node": {
+        "fill": "#fffef9",
+        "fontFamily": "IBM Plex Sans",
+        "fontSize": 16,
+        "padding": 22,
+        "radius": 2,
+        "secondary": "#657367",
+        "shape": "rect",
+        "stroke": "#c7d0c3",
+        "text": "#243b30"
+      },
+      "revision": "1.0.0",
+      "roles": {
+        "caution": {
+          "fill": "#fae4b6",
+          "stroke": "#d8b977"
+        },
+        "emphasis": {
+          "fill": "#dce9b9",
+          "stroke": "#a7be78"
+        },
+        "quiet": {
+          "fill": "#eeeee8",
+          "stroke": "#d0d3c9"
+        }
+      },
+      "spacing": {
+        "layer": 80,
+        "node": 44
+      },
+      "version": 1
+    },
+    "nodes": {},
+    "theme": "paper"
+  },
+  "title": "A platform built around clear boundaries",
+  "type": "diagram",
+  "version": 2
+}

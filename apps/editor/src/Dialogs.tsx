@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, ArrowRight, Workflow, Blocks, FileJson, Terminal, Copy, Check } from 'lucide-react';
 import { parseDocument, serializeDocument, type Diagram } from '../../../packages/core/src';
-import { templates } from './storage';
+import { templates, gallery } from './storage';
 export function Dialogs({
   modal,
   close,
@@ -108,11 +108,34 @@ export function Dialogs({
                 <small>5 steps · decision & feedback</small>
               </button>
             </div>
+            <div className="gallery-starters">
+              <h3>Explore the general engine</h3>
+              <div className="gallery-starter-list">
+                {Object.entries(gallery).map(([name, example]) => (
+                  <button
+                    className="secondary"
+                    key={name}
+                    onClick={() => {
+                      commit(structuredClone(example));
+                      close();
+                      notify('Example opened. Previous diagram is available with Undo.');
+                    }}
+                  >
+                    {name === 'development'
+                      ? 'Custom comparison'
+                      : name[0].toUpperCase() + name.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <p>
+                Starting points, not diagram categories. Every example uses the same primitives.
+              </p>
+            </div>
             <button
               className="secondary full"
               onClick={() => {
                 commit(
-                  parseDocument({ version: 1, title: 'Untitled diagram', nodes: [], edges: [] }),
+                  parseDocument({ version: 2, title: 'Untitled diagram', nodes: [], edges: [] }),
                 );
                 close();
                 notify('A blank canvas, ready for your ideas.');
@@ -142,7 +165,7 @@ export function Dialogs({
               </div>
             )}
             <div className="modal-actions">
-              <span>Forma document · version 1</span>
+              <span>Forma document · version {doc.version}</span>
               <button
                 className="primary"
                 onClick={() => {

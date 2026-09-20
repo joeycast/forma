@@ -1,0 +1,310 @@
+{
+  "description": "A custom visual explanation / Parallel generation changes where engineering attention is needed.",
+  "edges": [
+    {
+      "id": "brief-implement",
+      "source": "brief",
+      "style": "solid",
+      "target": "implement"
+    },
+    {
+      "id": "implement-review",
+      "source": "implement",
+      "style": "solid",
+      "target": "review"
+    },
+    {
+      "id": "review-deliver",
+      "source": "review",
+      "style": "solid",
+      "target": "deliver"
+    },
+    {
+      "id": "intent-streamA",
+      "source": "intent",
+      "style": "solid",
+      "target": "streamA"
+    },
+    {
+      "id": "intent-streamB",
+      "source": "intent",
+      "style": "solid",
+      "target": "streamB"
+    },
+    {
+      "id": "intent-streamC",
+      "source": "intent",
+      "style": "solid",
+      "target": "streamC"
+    },
+    {
+      "id": "streamA-verify",
+      "source": "streamA",
+      "style": "solid",
+      "target": "verify"
+    },
+    {
+      "id": "streamB-verify",
+      "source": "streamB",
+      "style": "solid",
+      "target": "verify"
+    },
+    {
+      "id": "streamC-verify",
+      "source": "streamC",
+      "style": "solid",
+      "target": "verify"
+    },
+    {
+      "appearance": {
+        "arrowEnd": "open",
+        "dash": "dotted",
+        "strokeWidth": 2
+      },
+      "id": "verify-release",
+      "label": "Evidence accepted",
+      "source": "verify",
+      "style": "solid",
+      "target": "release"
+    }
+  ],
+  "groups": [
+    {
+      "color": "slate",
+      "id": "traditional",
+      "label": "Traditional"
+    },
+    {
+      "color": "slate",
+      "id": "enabled",
+      "label": "AI-enabled"
+    }
+  ],
+  "layout": {
+    "direction": "DOWN",
+    "mode": "grid",
+    "spacing": "comfortable"
+  },
+  "nodes": [
+    {
+      "description": "One work stream",
+      "emphasis": "normal",
+      "group": "traditional",
+      "id": "brief",
+      "kind": "service",
+      "label": "Brief",
+      "placement": {
+        "column": 0,
+        "row": 0
+      },
+      "role": "quiet",
+      "style": {
+        "width": 150
+      }
+    },
+    {
+      "description": "Serial development",
+      "emphasis": "normal",
+      "group": "traditional",
+      "id": "implement",
+      "kind": "service",
+      "label": "Implement",
+      "placement": {
+        "column": 0,
+        "row": 1
+      },
+      "style": {
+        "width": 150
+      }
+    },
+    {
+      "description": "One change at a time",
+      "emphasis": "normal",
+      "group": "traditional",
+      "id": "review",
+      "kind": "service",
+      "label": "Review",
+      "placement": {
+        "column": 0,
+        "row": 2
+      },
+      "style": {
+        "width": 150
+      }
+    },
+    {
+      "description": "Steady throughput",
+      "emphasis": "normal",
+      "group": "traditional",
+      "id": "deliver",
+      "kind": "service",
+      "label": "Deliver",
+      "placement": {
+        "column": 0,
+        "row": 3
+      },
+      "role": "quiet",
+      "style": {
+        "width": 150
+      }
+    },
+    {
+      "description": "One clear specification",
+      "emphasis": "normal",
+      "group": "enabled",
+      "id": "intent",
+      "kind": "service",
+      "label": "Shared intent",
+      "placement": {
+        "column": 2,
+        "row": 0
+      },
+      "role": "emphasis"
+    },
+    {
+      "description": "Compare alternative approaches",
+      "emphasis": "normal",
+      "group": "enabled",
+      "id": "streamA",
+      "kind": "service",
+      "label": "Explore",
+      "placement": {
+        "column": 1,
+        "row": 1
+      }
+    },
+    {
+      "description": "Parallel work packages",
+      "emphasis": "normal",
+      "group": "enabled",
+      "id": "streamB",
+      "kind": "service",
+      "label": "Implement",
+      "placement": {
+        "column": 2,
+        "row": 1
+      }
+    },
+    {
+      "description": "Independent checks",
+      "emphasis": "normal",
+      "group": "enabled",
+      "id": "streamC",
+      "kind": "service",
+      "label": "Test",
+      "placement": {
+        "column": 3,
+        "row": 1
+      }
+    },
+    {
+      "description": "Independent evidence before release",
+      "emphasis": "normal",
+      "group": "enabled",
+      "id": "verify",
+      "kind": "service",
+      "label": "Verify with evidence",
+      "placement": {
+        "column": 2,
+        "row": 2
+      },
+      "role": "caution",
+      "style": {
+        "dash": "dashed",
+        "fill": "#fff0be",
+        "fontFamily": "IBM Plex Sans",
+        "fontSize": 18,
+        "radius": 0,
+        "secondary": "#657367",
+        "stroke": "#4a4a45",
+        "strokeWidth": 2,
+        "text": "#243b30"
+      }
+    },
+    {
+      "description": "Verified outcomes, not generated volume",
+      "emphasis": "normal",
+      "group": "enabled",
+      "id": "release",
+      "kind": "service",
+      "label": "Release with confidence",
+      "placement": {
+        "column": 2,
+        "row": 3
+      },
+      "role": "emphasis"
+    }
+  ],
+  "presentation": {
+    "designSystem": {
+      "canvas": {
+        "background": "#f7f5ef",
+        "border": "#d8ded4",
+        "secondary": "#69736b",
+        "text": "#242c29"
+      },
+      "edge": {
+        "arrowEnd": "filled",
+        "routing": "straight",
+        "stroke": "#64776a",
+        "strokeWidth": 1.6
+      },
+      "group": {
+        "dash": "solid",
+        "fill": "#eeeee5",
+        "radius": 4,
+        "stroke": "#cdd3c6",
+        "text": "#526849"
+      },
+      "id": "atelier",
+      "name": "Atelier / editorial",
+      "node": {
+        "fill": "#fffef9",
+        "fontFamily": "IBM Plex Sans",
+        "fontSize": 16,
+        "padding": 22,
+        "radius": 2,
+        "secondary": "#657367",
+        "shape": "rect",
+        "stroke": "#c7d0c3",
+        "text": "#243b30",
+        "width": 220
+      },
+      "revision": "1.0.0",
+      "roles": {
+        "caution": {
+          "fill": "#fae4b6",
+          "stroke": "#d8b977"
+        },
+        "emphasis": {
+          "fill": "#dce9b9",
+          "stroke": "#a7be78"
+        },
+        "quiet": {
+          "fill": "#eeeee8",
+          "stroke": "#d0d3c9"
+        }
+      },
+      "spacing": {
+        "layer": 80,
+        "node": 64
+      },
+      "version": 1
+    },
+    "nodes": {
+      "verify": {
+        "position": {
+          "x": 568,
+          "y": 336
+        },
+        "style": {
+          "fill": "#ffe5a3"
+        }
+      }
+    },
+    "theme": "paper"
+  },
+  "title": "More creation. The same verification bottleneck.",
+  "type": "diagram",
+  "version": 2
+}

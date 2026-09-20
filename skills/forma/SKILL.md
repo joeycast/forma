@@ -1,19 +1,18 @@
 ---
 name: forma
-description: Create and improve professional architecture diagrams and process flows using Forma's native JSON, local CLI, and visual inspection.
+description: Create, modify, inspect, and export professional diagrams using Forma's local files, CLI, and shared graphical editor.
 ---
 
 # Forma
 
-Use the repository's `node packages/cli/bin.mjs` command. No service, account, agent provider, or MCP server is required. Run `--help` for machine-readable usage.
+Use `node packages/cli/bin.mjs` from this repository; `--help` returns JSON. No account, service, MCP server, or particular agent harness is needed.
 
-1. Choose `architecture` or `flow`. Start with `create --template architecture --output diagram.forma.json`, or write a native document using [the format reference](../../docs/format.md).
-2. Express components, relationships, meaningful groups, short labels, and one or two primary points of emphasis. Prefer semantic intent over coordinates.
-3. Run `validate diagram.forma.json`, then `inspect diagram.forma.json`.
-4. Run `render diagram.forma.json --output diagram.svg`. Open and inspect the actual output; inspection heuristics cannot judge the full composition.
-5. Iterate using `patch diagram.forma.json --patch changes.json`. Preserve stable IDs and human overrides. Never rebuild an existing document from scratch just to change a label or add a component.
-6. Export with `export diagram.forma.json --output diagram.png`, and deliver the native JSON alongside the export.
+Write a version 2 native document with stable node/edge/group IDs, short labels, relationships, and meaningful roles. No diagram type is required. `create --output diagram.forma.json` produces a blank document. The [format reference](../../docs/format.md) explains primitives, composition, style precedence, and patching.
 
-Humans can open, edit, and save the same native document in the web editor. Reload their saved file before editing again. Only clear pinned positions when explicitly appropriate; semantic patching preserves them automatically.
+Prefer semantic relationships and automatic layout. Use a composition grid when relative rows and columns carry meaning. Use human position overrides for deliberate exceptions. Adopt an organizational identity with `style diagram.forma.json --system examples/design-systems/atelier.json`; per-element styles remain intact.
 
-See [composition guidance](references/composition.md) for visual refinement. CLI stdout is JSON; errors go to stderr. Exit 1 means input/execution failure; inspect exits 2 for errors, and also for warnings under `--strict`. `layout --output scene.json` produces derived geometry, never the authoritative document.
+Run `validate`, `inspect`, and `render --output diagram.png` on the artifact. **View the actual render** and refine its hierarchy, spacing, routing, and readability. Zero diagnostic warnings is useful evidence, not proof of good design. Deliver the native file and export together.
+
+For edits, reload the human's latest saved file and use `patch --patch changes.json`. Preserve IDs and presentation overrides. Never reconstruct a diagram merely to add a node or change a label. `layout --output scene.json` is derived geometry, never the source artifact. CLI exit 1 means invalid input/execution; inspect exits 2 for errors (also warnings with `--strict`).
+
+Use a specialist only if it helps: [architecture](../forma-architecture/SKILL.md), [decisions and flows](../forma-flow/SKILL.md), [organization](../forma-organization/SKILL.md), [entities](../forma-entities/SKILL.md), [timelines](../forma-timeline/SKILL.md), [mind maps](../forma-mindmap/SKILL.md). For an unfamiliar explanation, combine primitives directly; skills are accelerators, not boundaries. See [composition](references/composition.md) when refining.

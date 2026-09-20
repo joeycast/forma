@@ -1,0 +1,158 @@
+{
+  "description": "06 / EXPLORATION     Read from the central question to the contributing capabilities.",
+  "edges": [
+    {
+      "id": "center-feedback",
+      "source": "center",
+      "style": "solid",
+      "target": "feedback"
+    },
+    {
+      "id": "center-flow",
+      "source": "center",
+      "style": "solid",
+      "target": "flow"
+    },
+    {
+      "id": "center-clarity",
+      "source": "center",
+      "style": "solid",
+      "target": "clarity"
+    },
+    {
+      "id": "center-safety",
+      "source": "center",
+      "style": "solid",
+      "target": "safety"
+    }
+  ],
+  "groups": [],
+  "layout": {
+    "direction": "RIGHT",
+    "mode": "grid",
+    "spacing": "comfortable"
+  },
+  "nodes": [
+    {
+      "description": "Fast feedback. Clear intent.",
+      "emphasis": "normal",
+      "id": "center",
+      "kind": "service",
+      "label": "Developer experience",
+      "placement": {
+        "column": 1,
+        "row": 1
+      },
+      "role": "emphasis",
+      "style": {
+        "shape": "ellipse",
+        "width": 270
+      }
+    },
+    {
+      "description": "Tests · preview · observability",
+      "emphasis": "normal",
+      "id": "feedback",
+      "kind": "service",
+      "label": "Feedback",
+      "placement": {
+        "column": 1,
+        "row": 0
+      }
+    },
+    {
+      "description": "Small batches · fewer handoffs",
+      "emphasis": "normal",
+      "id": "flow",
+      "kind": "service",
+      "label": "Flow",
+      "placement": {
+        "column": 0,
+        "row": 1
+      }
+    },
+    {
+      "description": "Ownership · documentation",
+      "emphasis": "normal",
+      "id": "clarity",
+      "kind": "service",
+      "label": "Clarity",
+      "placement": {
+        "column": 2,
+        "row": 1
+      }
+    },
+    {
+      "description": "Reversible changes · guardrails",
+      "emphasis": "normal",
+      "id": "safety",
+      "kind": "service",
+      "label": "Safety",
+      "placement": {
+        "column": 1,
+        "row": 2
+      }
+    }
+  ],
+  "presentation": {
+    "designSystem": {
+      "canvas": {
+        "background": "#f7f5ef",
+        "border": "#d8ded4",
+        "secondary": "#69736b",
+        "text": "#242c29"
+      },
+      "edge": {
+        "arrowEnd": "none",
+        "routing": "straight",
+        "stroke": "#64776a",
+        "strokeWidth": 1.6
+      },
+      "group": {
+        "dash": "solid",
+        "fill": "#eeeee5",
+        "radius": 4,
+        "stroke": "#cdd3c6",
+        "text": "#526849"
+      },
+      "id": "atelier",
+      "name": "Atelier / editorial",
+      "node": {
+        "fill": "#fffef9",
+        "fontFamily": "IBM Plex Sans",
+        "fontSize": 16,
+        "padding": 22,
+        "radius": 2,
+        "secondary": "#657367",
+        "shape": "rect",
+        "stroke": "#c7d0c3",
+        "text": "#243b30"
+      },
+      "revision": "1.0.0",
+      "roles": {
+        "caution": {
+          "fill": "#fae4b6",
+          "stroke": "#d8b977"
+        },
+        "emphasis": {
+          "fill": "#dce9b9",
+          "stroke": "#a7be78"
+        },
+        "quiet": {
+          "fill": "#eeeee8",
+          "stroke": "#d0d3c9"
+        }
+      },
+      "spacing": {
+        "layer": 80,
+        "node": 44
+      },
+      "version": 1
+    },
+    "nodes": {},
+    "theme": "paper"
+  },
+  "title": "What makes an effective developer experience?",
+  "type": "diagram",
+  "version": 2
+}
