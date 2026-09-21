@@ -48,15 +48,47 @@ Content and relationships remain intact when changing identity. Use coherent for
 
 ## Style vocabulary
 
-| Context | Properties                                                                                                                                                                                                                                      |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Nodes   | `shape`: rect, pill, diamond, ellipse, cylinder, text; `fill`, `stroke`, `strokeWidth`, `dash`, `radius`, `opacity`, `text`, `secondary`, `fontFamily`, `fontSize`, `fontWeight` (400/600), `padding`, `width`, `height`, `align` (left/center) |
-| Edges   | `stroke`, `strokeWidth`, `dash`, `opacity`, `arrowStart`, `arrowEnd` (none/open/filled/diamond/circle), `routing` (orthogonal/straight), `sourcePort`, `targetPort` (top/right/bottom/left); `fill` and `text` color the label plate and text   |
-| Groups  | `fill`, `stroke`, `strokeWidth`, `dash`, `radius`, `opacity`, `text`, `fontFamily`; heading geometry stays fixed                                                                                                                                |
-| Canvas  | `background`, `text`, `secondary`, `border`, `fontFamily`                                                                                                                                                                                       |
-| Spacing | `node` and `layer`, in scene pixels; override the legacy spacing preset                                                                                                                                                                         |
+| Context | Properties                                                                                                                                                                                                                                                                                 |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Nodes   | `shape`: rect, pill, diamond, ellipse, cylinder, text; `fill`, `stroke`, `strokeWidth`, `dash`, `radius`, `opacity`, `text`, `secondary`, `fontFamily`, `fontSize`, `fontWeight` (400/600), `padding`, `width`, `height`, `align` (left/center/right), `verticalAlign` (top/middle/bottom) |
+| Edges   | `stroke`, `strokeWidth`, `dash`, `opacity`, `arrowStart`, `arrowEnd` (none/open/filled/diamond/circle), `routing` (orthogonal/straight), `sourcePort`, `targetPort` (top/right/bottom/left), `sourceIndex`, `targetIndex`; `fill` and `text` color the label plate and text                |
+| Groups  | `fill`, `stroke`, `strokeWidth`, `dash`, `radius`, `opacity`, `text`, `fontFamily`; heading geometry stays fixed                                                                                                                                                                           |
+| Canvas  | `background`, `text`, `secondary`, `border`, `fontFamily`                                                                                                                                                                                                                                  |
+| Spacing | `node` and `layer`, in scene pixels; override the legacy spacing preset                                                                                                                                                                                                                    |
 
-Paint values are hex colors, `none`, or `transparent`. Dash is solid/dashed/dotted. Width is explicit; height is a minimum that grows to avoid clipping text. Pills/diamonds/ellipses center their content. Plain text nodes omit the surrounding shape and are useful for diagram annotations. All values are bounded and data-only: no CSS, remote URLs, or raw SVG fragments.
+Paint values are hex colors, `none`, or `transparent`. Dash is solid/dashed/dotted. Width is explicit; height is a minimum that grows to avoid clipping text. Pills, diamonds, and ellipses center their content unless `align` or `verticalAlign` says otherwise. Plain text nodes omit the surrounding shape and are useful for diagram annotations. All values are bounded and data-only: no CSS, remote URLs, or raw SVG fragments.
+
+## Connection points and paths
+
+Every shape has one connection point on each side, centered. Add more on a side when several connectors should leave from different places:
+
+```json
+{ "id": "api", "label": "API", "ports": { "right": 3, "left": 2 } }
+```
+
+Counts are 1–12. Omitted sides stay at one. Points are spaced evenly: index 0 is nearest the start of the side (left or top), and the default index is the center point. An edge selects a point with `appearance.sourcePort` / `targetPort` and optional `sourceIndex` / `targetIndex`. Several edges may share one point. Shared horizontal or vertical runs are allowed, so those connectors read as one combined line. The router still prefers a path that does not cross a different connector.
+
+Set `path` on an edge to pin the corners it must pass through. Coordinates are scene points, same as a human pin. The line stays orthogonal: Forma inserts elbows between corners and keeps the ends on the chosen points. A pinned path is not rerouted when components move. Clear it with a patch of `"path": null` to return to automatic routing.
+
+```json
+{
+  "id": "retry",
+  "source": "gate",
+  "target": "checks",
+  "appearance": {
+    "sourcePort": "right",
+    "sourceIndex": 0,
+    "targetPort": "right",
+    "targetIndex": 1
+  },
+  "path": [
+    { "x": 640, "y": 180 },
+    { "x": 640, "y": 40 }
+  ]
+}
+```
+
+In the editor, hover a component to use its points, double-click a line or use Add corner to pin a path, and drag a corner to reshape it. Shift-click adds to the selection; a marquee does too.
 
 IBM Plex Sans Regular and SemiBold are bundled, measured, and embedded in exported SVG. Other font families are accepted but may fall back differently across machines; inspection reports that limitation. Portable custom-font packaging is future work. Straight routes attach to shape boundaries and do not avoid obstacles; inspect them. Side ports apply to orthogonal routes. Human pins preserve placement, not a frozen route.
 

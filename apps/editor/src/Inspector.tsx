@@ -25,6 +25,9 @@ import {
   type Accent,
   type AlignEdge,
   type DistributeAxis,
+  type PortSide,
+  portSides,
+  insertWaypoint,
 } from '../../../packages/core/src';
 export function TextField({
   label,
@@ -304,6 +307,73 @@ export function Inspector({
                       </button>
                     </>
                   )}
+                <div className="field">
+                  Connection points
+                  <div className="port-list">
+                    {portSides.map((side) => {
+                      const count = node.ports?.[side] ?? 1;
+                      const setCount = (next: number) => {
+                        const edges = doc.edges.flatMap((edge) => {
+                          const appearance: Record<string, null> = {};
+                          for (const end of ['source', 'target'] as const) {
+                            if (edge[end] !== node.id) continue;
+                            const portSide =
+                              edge.appearance?.[end === 'source' ? 'sourcePort' : 'targetPort'];
+                            const index =
+                              edge.appearance?.[end === 'source' ? 'sourceIndex' : 'targetIndex'];
+                            const fallback =
+                              doc.layout.direction === 'DOWN'
+                                ? end === 'source'
+                                  ? 'bottom'
+                                  : 'top'
+                                : end === 'source'
+                                  ? 'right'
+                                  : 'left';
+                            if (
+                              (portSide ?? fallback) === side &&
+                              index !== undefined &&
+                              index >= next
+                            )
+                              appearance[end === 'source' ? 'sourceIndex' : 'targetIndex'] = null;
+                          }
+                          return Object.keys(appearance).length
+                            ? [{ id: edge.id, appearance }]
+                            : [];
+                        });
+                        patch({
+                          nodes: [{ id: node.id, ports: { [side]: next > 1 ? next : null } }],
+                          ...(edges.length ? { edges } : {}),
+                        });
+                      };
+                      return (
+                        <div className="port-row" key={side}>
+                          <span>{side}</span>
+                          <span className="port-stepper">
+                            <button
+                              aria-label={`Fewer ${side} points`}
+                              disabled={count <= 1}
+                              onClick={() => setCount(count - 1)}
+                            >
+                              −
+                            </button>
+                            <span>{count}</span>
+                            <button
+                              aria-label={`More ${side} points`}
+                              disabled={count >= 12}
+                              onClick={() => setCount(count + 1)}
+                            >
+                              +
+                            </button>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="help-text">
+                    Each side starts with one point. Add more when several lines should leave from
+                    different places.
+                  </p>
+                </div>
                 <StyleFields
                   style={resolveNodeStyle(doc, node)}
                   onChange={(style) => patch({ overrides: { [node.id]: { style } } })}
@@ -366,6 +436,145 @@ export function Inspector({
                     <option value="dashed">Dashed</option>
                   </select>
                 </label>
+                {(['source', 'target'] as const).map((end) => {
+                  const nodeId = edge[end];
+                  const endpoint = doc.nodes.find((n) => n.id === nodeId);
+                  const portKey = end === 'source' ? 'sourcePort' : 'targetPort';
+                  const indexKey = end === 'source' ? 'sourceIndex' : 'targetIndex';
+                  const side = edge.appearance?.[portKey] ?? '';
+                  const count = side ? (endpoint?.ports?.[side as PortSide] ?? 1) : 1;
+                  return (
+                    <div key={end}>
+                      <label className="field">
+                        {end === 'source' ? 'Leaves from' : 'Arrives on'}
+                        <select
+                          value={side}
+                          onChange={(event) =>
+                            patch({
+                              edges: [
+                                {
+                                  id: edge.id,
+                                  appearance: {
+                                    [portKey]: event.target.value || null,
+                                    [indexKey]: null,
+                                  },
+                                },
+                              ],
+                            })
+                          }
+                        >
+                          <option value="">Automatic</option>
+                          {portSides.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {side && count > 1 && (
+                        <label className="field">
+                          Point
+                          <select
+                            value={String(
+                              edge.appearance?.[indexKey] ?? Math.floor((count - 1) / 2),
+                            )}
+                            onChange={(event) =>
+                              patch({
+                                edges: [
+                                  {
+                                    id: edge.id,
+                                    appearance: { [indexKey]: Number(event.target.value) },
+                                  },
+                                ],
+                              })
+                            }
+                          >
+                            {Array.from({ length: count }, (_, index) => (
+                              <option key={index} value={index}>
+                                {index + 1} of {count}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
+                <div className="field">
+                  Path
+                  {(edge.path ?? []).map((point, index) => (
+                    <CornerField
+                      key={`${index}:${point.x}:${point.y}`}
+                      index={index}
+                      point={point}
+                      onCommit={(next) =>
+                        patch({
+                          edges: [
+                            {
+                              id: edge.id,
+                              path: edge.path!.map((item, i) => (i === index ? next : item)),
+                            },
+                          ],
+                        })
+                      }
+                      onRemove={() => {
+                        const path = edge.path!.filter((_, i) => i !== index);
+                        patch({ edges: [{ id: edge.id, path: path.length ? path : null }] });
+                      }}
+                    />
+                  ))}
+                  <div className="path-actions">
+                    <button
+                      className="secondary"
+                      onClick={() => {
+                        const laid = scene?.edges.find((item) => item.id === edge.id);
+                        if (!laid?.points.length) return;
+                        let best = 0,
+                          length = -1;
+                        for (let i = 1; i < laid.points.length; i++) {
+                          const span = Math.hypot(
+                            laid.points[i].x - laid.points[i - 1].x,
+                            laid.points[i].y - laid.points[i - 1].y,
+                          );
+                          if (span > length) {
+                            length = span;
+                            best = i;
+                          }
+                        }
+                        const a = laid.points[best - 1],
+                          b = laid.points[best];
+                        const anchors = edge.path?.length
+                          ? [laid.points[0], ...edge.path, laid.points.at(-1)!]
+                          : laid.points;
+                        patch({
+                          edges: [
+                            {
+                              id: edge.id,
+                              path: insertWaypoint(anchors, {
+                                x: Math.round((a.x + b.x) / 2),
+                                y: Math.round((a.y + b.y) / 2),
+                              }),
+                            },
+                          ],
+                        });
+                      }}
+                    >
+                      Add corner
+                    </button>
+                    {edge.path && (
+                      <button
+                        className="text-button"
+                        onClick={() => patch({ edges: [{ id: edge.id, path: null }] })}
+                      >
+                        Use automatic path
+                      </button>
+                    )}
+                  </div>
+                  <p className="help-text">
+                    Double-click a line, or add a corner, to pin the route. Drag a corner to reshape
+                    it. Automatic routing returns when the path is cleared.
+                  </p>
+                </div>
                 <StyleFields
                   edge
                   style={resolveEdgeStyle(doc, edge)}
@@ -563,8 +772,8 @@ export function Inspector({
               <section className="inspector-tip">
                 <MouseTip />
                 <p>
-                  Select a component to edit its details, or drag a marquee to align several at
-                  once.
+                  Select a component to edit its details. Shift-click or drag a marquee to edit
+                  several at once.
                 </p>
               </section>
             )}
@@ -580,6 +789,56 @@ export function Inspector({
 }
 function MouseTip() {
   return <Crosshair size={19} />;
+}
+function CornerField({
+  point,
+  index,
+  onCommit,
+  onRemove,
+}: {
+  point: { x: number; y: number };
+  index: number;
+  onCommit: (point: { x: number; y: number }) => boolean;
+  onRemove: () => void;
+}) {
+  const [x, setX] = useState(String(point.x));
+  const [y, setY] = useState(String(point.y));
+  useEffect(() => {
+    setX(String(point.x));
+    setY(String(point.y));
+  }, [point.x, point.y]);
+  const commit = () => {
+    const next = { x: Number(x), y: Number(y) };
+    if (!Number.isFinite(next.x) || !Number.isFinite(next.y) || !onCommit(next)) {
+      setX(String(point.x));
+      setY(String(point.y));
+    }
+  };
+  return (
+    <div className="path-point">
+      <input
+        aria-label={`Corner ${index + 1} x`}
+        value={x}
+        onChange={(event) => setX(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+        }}
+      />
+      <input
+        aria-label={`Corner ${index + 1} y`}
+        value={y}
+        onChange={(event) => setY(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+        }}
+      />
+      <button aria-label={`Remove corner ${index + 1}`} onClick={onRemove}>
+        Remove
+      </button>
+    </div>
+  );
 }
 
 function StyleFields({
@@ -628,6 +887,41 @@ function StyleFields({
       </label>
       {!edge && (
         <>
+          <span className="field">
+            Horizontal
+            <span className="segmented thirds">
+              {(['left', 'center', 'right'] as const).map((align) => (
+                <button
+                  key={align}
+                  className={
+                    (style.align ??
+                      (['diamond', 'ellipse', 'pill'].includes(style.shape ?? '')
+                        ? 'center'
+                        : 'left')) === align
+                      ? 'active'
+                      : ''
+                  }
+                  onClick={() => onChange({ align })}
+                >
+                  {align}
+                </button>
+              ))}
+            </span>
+          </span>
+          <span className="field">
+            Vertical
+            <span className="segmented thirds">
+              {(['top', 'middle', 'bottom'] as const).map((verticalAlign) => (
+                <button
+                  key={verticalAlign}
+                  className={(style.verticalAlign ?? 'middle') === verticalAlign ? 'active' : ''}
+                  onClick={() => onChange({ verticalAlign })}
+                >
+                  {verticalAlign}
+                </button>
+              ))}
+            </span>
+          </span>
           <TextField
             label="Font family"
             value={style.fontFamily ?? 'IBM Plex Sans'}

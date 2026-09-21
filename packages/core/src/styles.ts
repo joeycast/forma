@@ -24,14 +24,19 @@ export const elementStyleSchema = z
     width: finite(80, 1200).optional(),
     height: finite(40, 1600).optional(),
     shape: z.enum(['rect', 'pill', 'diamond', 'ellipse', 'cylinder', 'text']).optional(),
-    align: z.enum(['left', 'center']).optional(),
+    align: z.enum(['left', 'center', 'right']).optional(),
+    verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
     arrowStart: z.enum(['none', 'open', 'filled', 'diamond', 'circle']).optional(),
     arrowEnd: z.enum(['none', 'open', 'filled', 'diamond', 'circle']).optional(),
     sourcePort: z.enum(['top', 'right', 'bottom', 'left']).optional(),
     targetPort: z.enum(['top', 'right', 'bottom', 'left']).optional(),
+    sourceIndex: z.number().int().min(0).max(11).optional(),
+    targetIndex: z.number().int().min(0).max(11).optional(),
     routing: z.enum(['orthogonal', 'straight']).optional(),
   })
   .strict();
+export const portSides = ['top', 'right', 'bottom', 'left'] as const;
+export type PortSide = (typeof portSides)[number];
 export type ElementStyle = z.infer<typeof elementStyleSchema>;
 export const designSystemSchema = z
   .object({

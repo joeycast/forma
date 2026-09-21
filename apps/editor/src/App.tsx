@@ -149,6 +149,13 @@ export function App({ account }: { account?: Account }) {
     setInspectorTab('design');
   }, []);
   const selectIds = useCallback((ids: string[]) => setSelected(ids), []);
+  const choose = useCallback((id: string, extend: boolean) => {
+    setInspectorTab('design');
+    setSelected((current) => {
+      if (!extend) return [id];
+      return current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+    });
+  }, []);
   const pinPositions = useCallback(
     (moves: { id: string; position: { x: number; y: number } }[]) => {
       if (!moves.length) return;
@@ -267,10 +274,45 @@ export function App({ account }: { account?: Account }) {
   const connect = (connection: Connection) => {
     if (connection.source && connection.target) {
       const id = uniqueId('edge');
-      patch({ edges: [{ id, source: connection.source, target: connection.target }] });
+      const read = (handle?: string | null) => {
+        const [side, index] = handle?.split(':') ?? [];
+        if (side !== 'top' && side !== 'right' && side !== 'bottom' && side !== 'left') return {};
+        return { side, index: Number(index) };
+      };
+      const source = read(connection.sourceHandle),
+        target = read(connection.targetHandle);
+      const appearance: Record<string, string | number> = {};
+      if (source.side) appearance.sourcePort = source.side;
+      if (target.side) appearance.targetPort = target.side;
+      const count = (nodeId: string | null, side?: string) =>
+        (side &&
+          doc.nodes.find((n) => n.id === nodeId)?.ports?.[
+            side as 'top' | 'right' | 'bottom' | 'left'
+          ]) ||
+        1;
+      if (source.side && count(connection.source, source.side) > 1)
+        appearance.sourceIndex = source.index ?? 0;
+      if (target.side && count(connection.target, target.side) > 1)
+        appearance.targetIndex = target.index ?? 0;
+      patch({
+        edges: [
+          {
+            id,
+            source: connection.source,
+            target: connection.target,
+            ...(Object.keys(appearance).length ? { appearance } : {}),
+          },
+        ],
+      });
       select(id);
     }
   };
+  const setPath = useCallback(
+    (id: string, path: { x: number; y: number }[] | null) => {
+      patch({ edges: [{ id, path }] });
+    },
+    [patch],
+  );
   const exportDiagram = async (format: 'svg' | 'png') => {
     if (exportBusy.current || busy || !scene) return;
     exportBusy.current = true;
@@ -319,7 +361,7 @@ export function App({ account }: { account?: Account }) {
       <button
         key={n.id}
         className={`outline-node ${selected.includes(n.id) ? 'selected' : ''} ${indented ? 'indented' : ''}`}
-        onClick={() => select(n.id)}
+        onClick={(event) => choose(n.id, event.shiftKey)}
       >
         <Icon size={14} />
         <span>{n.label}</span>
@@ -345,7 +387,7 @@ export function App({ account }: { account?: Account }) {
             >
               {collapsed.has(g.id) ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
             </button>
-            <button onClick={() => select(g.id)}>
+            <button onClick={(event) => choose(g.id, event.shiftKey)}>
               <span className={`group-dot ${g.color}`} />
               <span>{g.label}</span>
               <small>{doc.nodes.filter((n) => n.group === g.id).length}</small>
@@ -536,7 +578,7 @@ export function App({ account }: { account?: Account }) {
                     <button
                       className={`outline-node connection-row ${selected.includes(e.id) ? 'selected' : ''}`}
                       key={e.id}
-                      onClick={() => select(e.id)}
+                      onClick={(event) => choose(e.id, event.shiftKey)}
                     >
                       <GitBranch size={13} />
                       <span>
@@ -708,6 +750,7 @@ export function App({ account }: { account?: Account }) {
               }
               onConnect={connect}
               onDelete={remove}
+              onPath={setPath}
               fitKey={fitKey}
               grid={grid}
               onAdd={() => setMenu('add')}

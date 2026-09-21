@@ -70,13 +70,23 @@ function styledNodeMarkup(n: SceneNode, themeName: 'paper' | 'midnight'): string
   if (shape === 'text') body = '';
   const size = s.fontSize ?? 16,
     weight = s.fontWeight ?? 600;
-  const centered = s.align === 'center' || ['diamond', 'ellipse', 'pill'].includes(shape);
-  const x = centered ? w / 2 : (s.padding ?? 20),
-    anchor = centered ? 'text-anchor="middle"' : '';
+  const align = s.align ?? (['diamond', 'ellipse', 'pill'].includes(shape) ? 'center' : 'left');
+  const inset = shape === 'diamond' ? w * 0.23 : shape === 'ellipse' ? w * 0.16 : (s.padding ?? 20);
+  const x = align === 'center' ? w / 2 : align === 'right' ? w - inset : inset;
+  const anchor =
+    align === 'center' ? 'text-anchor="middle"' : align === 'right' ? 'text-anchor="end"' : '';
   const blockHeight =
     n.titleLines.length * size * 1.4 +
     (n.descriptionLines.length ? 8 + n.descriptionLines.length * 17 : 0);
-  const top = (h - blockHeight) / 2 + size;
+  const valign = s.verticalAlign ?? 'middle';
+  const vInset = shape === 'diamond' ? h * 0.28 : shape === 'ellipse' ? h * 0.2 : (s.padding ?? 20);
+  const blockTop =
+    valign === 'top'
+      ? vInset
+      : valign === 'bottom'
+        ? h - vInset - blockHeight
+        : (h - blockHeight) / 2;
+  const top = blockTop + size;
   body += n.titleLines
     .map((line, i) => t(x, top + i * size * 1.4, line, size, s.text ?? theme.text, weight, anchor))
     .join('');

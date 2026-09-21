@@ -5,6 +5,7 @@ import {
   Position,
   Background,
   BackgroundVariant,
+  ConnectionMode,
   applyNodeChanges,
   useReactFlow,
   type Node,
@@ -37,15 +38,40 @@ import {
   frameMarkup,
   edgeMarkup,
   edgeLabelMarkup,
-  routeBetween,
+  attachmentPoint,
+  insertWaypoint,
+  retargetRoute,
+  routeThrough,
+  portSides,
   type Scene,
   type SceneNode,
   type SceneEdge,
+  type Point,
 } from '../../../packages/core/src';
 type CardData = { node: SceneNode; theme: 'paper' | 'midnight'; down: boolean };
+const handlePosition = {
+  top: Position.Top,
+  right: Position.Right,
+  bottom: Position.Bottom,
+  left: Position.Left,
+} as const;
 const DiagramCard = memo(({ data, selected }: NodeProps<Node<CardData>>) => (
   <div className={`diagram-card ${selected ? 'is-selected' : ''}`} data-node-id={data.node.id}>
-    <Handle type="target" position={data.down ? Position.Top : Position.Left} />
+    {portSides.flatMap((side) => {
+      const count = data.node.semantic.ports?.[side] ?? 1;
+      return Array.from({ length: count }, (_, index) => {
+        const along = `${((index + 1) / (count + 1)) * 100}%`;
+        return (
+          <Handle
+            key={`${side}:${index}`}
+            id={`${side}:${index}`}
+            type="source"
+            position={handlePosition[side]}
+            style={side === 'top' || side === 'bottom' ? { left: along } : { top: along }}
+          />
+        );
+      });
+    })}
     <svg
       width={data.node.width}
       height={data.node.height}
@@ -58,7 +84,6 @@ const DiagramCard = memo(({ data, selected }: NodeProps<Node<CardData>>) => (
         ⌖
       </span>
     )}
-    <Handle type="source" position={data.down ? Position.Bottom : Position.Right} />
   </div>
 ));
 const Decoration = memo(({ data }: NodeProps) => (
@@ -71,7 +96,14 @@ const Decoration = memo(({ data }: NodeProps) => (
   />
 ));
 const DiagramConnector = memo(({ data, selected }: EdgeProps) => {
-  const { edge, theme } = data as { edge: SceneEdge; theme: 'paper' | 'midnight' };
+  const { edge, theme, onPath, onPreview } = data as {
+    edge: SceneEdge;
+    theme: 'paper' | 'midnight';
+    onPath?: (id: string, path: Point[]) => void;
+    onPreview?: (id: string, path: Point[]) => void;
+  };
+  const { screenToFlowPosition } = useReactFlow();
+  const waypoints = edge.semantic.path ?? [];
   return (
     <g className={selected ? 'selected-connector' : ''}>
       <path
@@ -80,10 +112,54 @@ const DiagramConnector = memo(({ data, selected }: EdgeProps) => {
         stroke="transparent"
         strokeWidth={18}
         className="react-flow__edge-interaction"
+        onDoubleClick={(event) => {
+          if (!onPath) return;
+          event.stopPropagation();
+          event.preventDefault();
+          const point = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+          const anchors = edge.semantic.path?.length
+            ? [edge.points[0], ...edge.semantic.path, edge.points.at(-1)!]
+            : edge.points;
+          onPath(edge.id, insertWaypoint(anchors, point));
+        }}
       />
       <g
         dangerouslySetInnerHTML={{ __html: edgeMarkup(edge, theme) + edgeLabelMarkup(edge, theme) }}
       />
+      {selected &&
+        waypoints.map((point, index) => (
+          <circle
+            key={`${point.x}:${point.y}:${index}`}
+            className="waypoint"
+            cx={point.x}
+            cy={point.y}
+            r={6}
+            onPointerDown={(event) => {
+              if (!onPath) return;
+              event.stopPropagation();
+              event.preventDefault();
+              const origin = waypoints.map((item) => ({ ...item }));
+              const move = (ev: PointerEvent) => {
+                const flow = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
+                origin[index] = { x: Math.round(flow.x), y: Math.round(flow.y) };
+                onPreview?.(
+                  edge.id,
+                  origin.map((item) => ({ ...item })),
+                );
+              };
+              const up = () => {
+                window.removeEventListener('pointermove', move);
+                window.removeEventListener('pointerup', up);
+                onPath(
+                  edge.id,
+                  origin.map((item) => ({ ...item })),
+                );
+              };
+              window.addEventListener('pointermove', move);
+              window.addEventListener('pointerup', up);
+            }}
+          />
+        ))}
     </g>
   );
 });
@@ -98,6 +174,7 @@ export function Canvas({
   onDistribute,
   onConnect,
   onDelete,
+  onPath,
   fitKey,
   grid,
   onAdd,
@@ -110,6 +187,7 @@ export function Canvas({
   onDistribute: (axis: DistributeAxis) => void;
   onConnect: (c: Connection) => void;
   onDelete: (ids: string[]) => void;
+  onPath: (id: string, path: Point[] | null) => void;
   fitKey: number;
   grid: boolean;
   onAdd: () => void;
@@ -118,6 +196,7 @@ export function Canvas({
     [zoom, setZoom] = useState(100),
     [pan, setPan] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [pathPreview, setPathPreview] = useState<{ id: string; path: Point[] } | null>(null);
   const { fitView, zoomIn, zoomOut } = useReactFlow();
   useEffect(() => {
     const theme = scene.document.presentation.theme,
@@ -174,28 +253,70 @@ export function Canvas({
     }, 100);
     return () => clearTimeout(timer);
   }, [fitKey, fitView]);
+  const down = scene.document.layout.direction === 'DOWN';
+  const liveBox = (id: string, fallback: SceneNode) => {
+    const node = nodes.find((n) => n.id === id);
+    return node ? { ...fallback, x: node.position.x, y: node.position.y } : fallback;
+  };
   const edges: Edge[] = scene.edges.map((e) => {
+    const source = liveBox(
+      e.semantic.source,
+      scene.nodes.find((n) => n.id === e.semantic.source)!,
+    );
+    const target = liveBox(
+      e.semantic.target,
+      scene.nodes.find((n) => n.id === e.semantic.target)!,
+    );
+    const from = attachmentPoint(
+      source,
+      source.semantic.ports,
+      e.style?.sourcePort,
+      e.style?.sourceIndex,
+      down ? 'bottom' : 'right',
+    );
+    const to = attachmentPoint(
+      target,
+      target.semantic.ports,
+      e.style?.targetPort,
+      e.style?.targetIndex,
+      down ? 'top' : 'left',
+    );
+    const preview = pathPreview?.id === e.id ? pathPreview.path : null;
+    const custom = preview ?? e.semantic.path;
     let edge = e;
-    if (dragging) {
-      const source = nodes.find((n) => n.id === e.semantic.source),
-        target = nodes.find((n) => n.id === e.semantic.target);
-      if (source && target) {
-        const a = { ...(source.data as CardData).node, ...source.position },
-          b = { ...(target.data as CardData).node, ...target.position };
-        edge = {
-          ...e,
-          label: undefined,
-          points: routeBetween(a, b, [], scene.document.layout.direction === 'DOWN', a.id === b.id),
-        };
-      }
+    if (preview || (dragging && source.id !== target.id)) {
+      const points = custom?.length
+        ? routeThrough(from.point, custom, to.point, from.side, to.side)
+        : (retargetRoute(e.points, from.point, to.point, from.side, to.side) ??
+          routeThrough(from.point, e.points.slice(1, -1), to.point, from.side, to.side));
+      edge = {
+        ...e,
+        semantic: preview ? { ...e.semantic, path: preview } : e.semantic,
+        label: undefined,
+        points,
+      };
     }
     return {
       id: e.id,
       source: e.semantic.source,
       target: e.semantic.target,
+      sourceHandle: e.style?.sourcePort
+        ? `${e.style.sourcePort}:${e.style.sourceIndex ?? 0}`
+        : undefined,
+      targetHandle: e.style?.targetPort
+        ? `${e.style.targetPort}:${e.style.targetIndex ?? 0}`
+        : undefined,
       type: 'diagram',
       selected: selected.includes(e.id),
-      data: { edge, theme: scene.document.presentation.theme },
+      data: {
+        edge,
+        theme: scene.document.presentation.theme,
+        onPath: (id: string, path: Point[]) => {
+          setPathPreview(null);
+          onPath(id, path);
+        },
+        onPreview: (id: string, path: Point[]) => setPathPreview({ id, path }),
+      },
     };
   });
   return (
@@ -242,6 +363,8 @@ export function Canvas({
         onNodeDragStart={() => setDragging(true)}
         onNodeDragStop={() => setDragging(false)}
         onConnect={onConnect}
+        connectionMode={ConnectionMode.Loose}
+        multiSelectionKeyCode={['Shift', 'Meta', 'Control']}
         onNodesDelete={(ns) => onDelete(ns.filter((n) => n.type === 'diagram').map((n) => n.id))}
         onEdgesDelete={(es) => onDelete(es.map((e) => e.id))}
         deleteKeyCode={null}

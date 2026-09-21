@@ -638,6 +638,56 @@ p {
   stroke: #8b70d1;
   stroke-width: 2.5;
 }
+.waypoint {
+  fill: #fff;
+  stroke: #8b70d1;
+  stroke-width: 2px;
+  cursor: grab;
+}
+.port-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.port-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #5c6570;
+  text-transform: capitalize;
+}
+.port-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.port-stepper button {
+  width: 22px;
+  height: 22px;
+  border: 1px solid #e5e8ef;
+  border-radius: 4px;
+}
+.port-stepper span {
+  min-width: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.path-point {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+.path-point input {
+  width: 72px;
+}
+.path-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
 .react-flow__attribution {
   font-size: 8px !important;
   opacity: 0.5;
@@ -975,6 +1025,11 @@ p {
   margin-top: 7px;
   padding: 3px;
   gap: 2px;
+}
+.segmented.thirds > button {
+  width: auto;
+  flex: 1;
+  text-transform: capitalize;
 }
 .segmented > button {
   width: 50%;

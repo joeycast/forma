@@ -198,7 +198,7 @@ async function main() {
   if (!command || command === '--help' || command === 'help') {
     output({
       name: 'forma',
-      version: '0.4.3',
+      version: '0.5.0',
       usage: [
         'forma serve [--directory ~/Forma] [--port 4242]',
         'forma host (configured with FORMA_* environment variables)',

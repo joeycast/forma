@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { elementStyleSchema, designSystemSchema } from './styles';
+import { elementStyleSchema, designSystemSchema, type PortSide } from './styles';
 
 const id = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,79}$/);
 const text = z.string().max(2000);
@@ -10,6 +10,16 @@ const position = z
     y: z.number().finite().min(-10000).max(10000),
   })
   .strict();
+const portCount = z.number().int().min(1).max(12);
+export const portCountsSchema = z
+  .object({
+    top: portCount.optional(),
+    right: portCount.optional(),
+    bottom: portCount.optional(),
+    left: portCount.optional(),
+  })
+  .strict();
+export type PortCounts = z.infer<typeof portCountsSchema>;
 export const nodeSchema = z
   .object({
     id,
@@ -24,6 +34,7 @@ export const nodeSchema = z
       .optional(),
     group: id.optional(),
     emphasis: z.enum(['normal', 'primary', 'muted']).default('normal'),
+    ports: portCountsSchema.optional(),
   })
   .strict();
 export const edgeSchema = z
@@ -35,6 +46,7 @@ export const edgeSchema = z
     style: z.enum(['solid', 'dashed']).default('solid'),
     role: id.optional(),
     appearance: elementStyleSchema.optional(),
+    path: z.array(position).min(1).max(24).optional(),
   })
   .strict();
 export const groupSchema = z
@@ -145,10 +157,34 @@ export function parseDocument(input: unknown): Diagram {
   for (const n of doc.nodes)
     if (n.group && !groups.has(n.group))
       issues.push({ path: `nodes.${n.id}.group`, message: 'Unknown group' });
-  for (const e of doc.edges)
+  const nodeById = new Map(doc.nodes.map((n) => [n.id, n]));
+  for (const e of doc.edges) {
     for (const side of ['source', 'target'] as const)
       if (!nodes.has(e[side]))
         issues.push({ path: `edges.${e.id}.${side}`, message: `Unknown node: ${e[side]}` });
+    const source = nodeById.get(e.source),
+      target = nodeById.get(e.target);
+    if (source)
+      checkPortIndex(
+        issues,
+        e.id,
+        'source',
+        e.appearance?.sourcePort,
+        e.appearance?.sourceIndex,
+        source.ports,
+        doc.layout.direction,
+      );
+    if (target)
+      checkPortIndex(
+        issues,
+        e.id,
+        'target',
+        e.appearance?.targetPort,
+        e.appearance?.targetIndex,
+        target.ports,
+        doc.layout.direction,
+      );
+  }
   for (const g of doc.groups) {
     if (g.parent && !groups.has(g.parent))
       issues.push({ path: `groups.${g.id}.parent`, message: 'Unknown parent' });
@@ -228,10 +264,22 @@ export function patchDocument(input: Diagram, raw: unknown): Diagram {
     for (const item of patch[key] ?? []) {
       const prior = map.get(item.id);
       const next = { ...prior, ...item };
-      for (const field of ['style', 'appearance'] as const) {
-        if (item[field] && typeof item[field] === 'object')
-          next[field] = { ...((prior?.[field] as object) ?? {}), ...(item[field] as object) };
+      for (const field of ['style', 'appearance', 'ports'] as const) {
+        if (item[field] === null) {
+          delete next[field];
+          continue;
+        }
+        if (item[field] && typeof item[field] === 'object') {
+          const merged: Record<string, unknown> = {
+            ...((prior?.[field] as Record<string, unknown>) ?? {}),
+            ...(item[field] as Record<string, unknown>),
+          };
+          for (const [key, value] of Object.entries(merged)) if (value === null) delete merged[key];
+          if (Object.keys(merged).length) next[field] = merged;
+          else delete next[field];
+        }
       }
+      if (next.path === null) delete next.path;
       map.set(item.id, next);
     }
     for (const keyToRemove of patch.remove?.[key] ?? []) map.delete(keyToRemove);
@@ -278,6 +326,35 @@ export function fingerprint(doc: Diagram): string {
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
+export function portCountOn(ports: PortCounts | undefined, side: PortSide) {
+  return ports?.[side] ?? 1;
+}
+function checkPortIndex(
+  issues: { path: string; message: string }[],
+  edgeId: string,
+  end: 'source' | 'target',
+  side: PortSide | undefined,
+  index: number | undefined,
+  ports: PortCounts | undefined,
+  direction: 'RIGHT' | 'DOWN',
+) {
+  if (index === undefined) return;
+  const chosen =
+    side ??
+    (direction === 'DOWN'
+      ? end === 'source'
+        ? 'bottom'
+        : 'top'
+      : end === 'source'
+        ? 'right'
+        : 'left');
+  const count = portCountOn(ports, chosen);
+  if (index >= count)
+    issues.push({
+      path: `edges.${edgeId}.appearance.${end}Index`,
+      message: `Port ${index} is outside ${chosen} (${count} ${count === 1 ? 'point' : 'points'})`,
+    });
+}
 function hasV2Features(doc: Diagram): boolean {
   return !!(
     !['architecture', 'flow'].includes(doc.type) ||
@@ -288,11 +365,12 @@ function hasV2Features(doc: Diagram): boolean {
         n.style ||
         n.role ||
         n.placement ||
+        n.ports ||
         !['service', 'database', 'queue', 'person', 'process', 'decision', 'client'].includes(
           n.kind,
         ),
     ) ||
-    doc.edges.some((e) => e.appearance || e.role) ||
+    doc.edges.some((e) => e.appearance || e.role || e.path) ||
     doc.groups.some((g) => g.style || g.role) ||
     Object.values(doc.presentation.nodes).some((n) => n.style)
   );

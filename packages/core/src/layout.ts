@@ -3,7 +3,20 @@ import type { ElkNode, ElkExtendedEdge, ELK } from 'elkjs';
 import { fingerprint, parseDocument, type Diagram, type Point } from './document';
 import { nodeText, styledNodeText, textWidth, wrapText } from './text';
 import type { Box, Scene, SceneEdge, SceneGroup, SceneNode } from './scene';
-import { overlaps, routeBetween, simplify, segmentHitsBox, shapeBoundary } from './geometry';
+import {
+  arriveSide,
+  attachmentPoint,
+  departSide,
+  isOrthogonal,
+  overlaps,
+  retargetRoute,
+  routeBetween,
+  routesCross,
+  routeThrough,
+  segmentHitsBox,
+  shapeBoundary,
+  simplify,
+} from './geometry';
 let elkPromise: Promise<ELK> | undefined;
 const groupMinWidth = (label: string) =>
   Math.max(180, Math.ceil(textWidth(label.toUpperCase(), 11, 600) + label.length * 1.2 + 64));
@@ -62,7 +75,8 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
       ),
       'elk.layered.spacing.edgeNodeBetweenLayers': '28',
       'elk.spacing.edgeNode': '24',
-      'elk.spacing.edgeEdge': '16',
+      'elk.spacing.edgeEdge': '0',
+      'elk.layered.spacing.edgeEdgeBetweenLayers': '0',
       'elk.padding': '[top=0,left=0,bottom=0,right=0]',
       'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
       'elk.randomSeed': '1',
@@ -137,7 +151,6 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
     }),
   );
   const labelBoxes: Box[] = [];
-  const pinned = nodes.some((n) => n.pinned);
   // ELK reserves generous compound boundary channels. Compress only wholly empty
   // bands between top-level containers, keeping enough space for labels.
   const axis = doc.layout.direction === 'RIGHT' ? 'x' : 'y';
@@ -226,68 +239,135 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
       });
     }
   }
+  const down = doc.layout.direction === 'DOWN';
+  const routed: { points: Point[]; custom: boolean; straight: boolean }[] = [];
+  const commit = (points: Point[], custom: boolean, straight: boolean) => {
+    routed.push({ points, custom, straight });
+    return points;
+  };
   for (const semantic of doc.edges) {
     const edgeStyle = resolveEdgeStyle(doc, semantic);
+    const source = allNodes.get(semantic.source)!,
+      target = allNodes.get(semantic.target)!;
+    const skip = new Set([source.id, target.id]);
+    const blocked = (points: Point[]) =>
+      nodes.some(
+        (n) =>
+          !skip.has(n.id) && points.some((p, i) => i > 0 && segmentHitsBox(points[i - 1], p, n)),
+      );
+    const peers = () => routed.filter((r) => !r.straight).map((r) => r.points);
     const raw = rawMap.get(semantic.id),
       sections = raw?.edge.sections;
+    const elkPoints = sections?.length
+      ? simplify(
+          sections
+            .flatMap((s) => [s.startPoint, ...(s.bendPoints ?? []), s.endPoint])
+            .map((p) => ({
+              x: Math.round((p.x + raw!.x) * 100) / 100,
+              y: Math.round((p.y + raw!.y) * 100) / 100,
+            }))
+            .map(composePoint),
+        )
+      : null;
+    const explicitSide = !!(edgeStyle.sourcePort || edgeStyle.targetPort);
+    const elkUsable = !!(elkPoints && elkPoints.length > 1 && doc.layout.mode !== 'grid');
+    const sourceSide =
+      edgeStyle.sourcePort ??
+      (elkUsable ? departSide(elkPoints![0], elkPoints![1]) : undefined) ??
+      (down ? 'bottom' : 'right');
+    const targetSide =
+      edgeStyle.targetPort ??
+      (elkUsable ? arriveSide(elkPoints!.at(-2)!, elkPoints!.at(-1)!) : undefined) ??
+      (down ? 'top' : 'left');
+    const from = attachmentPoint(
+      source,
+      source.semantic.ports,
+      sourceSide,
+      edgeStyle.sourceIndex,
+      sourceSide,
+    );
+    const to = attachmentPoint(
+      target,
+      target.semantic.ports,
+      targetSide,
+      edgeStyle.targetIndex,
+      targetSide,
+    );
     let points: Point[];
-    if (sections?.length)
-      points = simplify(
-        sections
-          .flatMap((s) => [s.startPoint, ...(s.bendPoints ?? []), s.endPoint])
-          .map((p) => ({
-            x: Math.round((p.x + raw!.x) * 100) / 100,
-            y: Math.round((p.y + raw!.y) * 100) / 100,
-          }))
-          .map(composePoint),
+    const straight = edgeStyle.routing === 'straight' && source.id !== target.id;
+    if (straight) {
+      if (semantic.path?.length)
+        points = routeThrough(from.point, semantic.path, to.point, from.side, to.side);
+      else {
+        const center = (b: Box) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+        points =
+          edgeStyle.sourcePort || edgeStyle.targetPort
+            ? [from.point, to.point]
+            : [
+                shapeBoundary(source, center(target), source.style?.shape),
+                shapeBoundary(target, center(source), target.style?.shape),
+              ];
+      }
+      commit(points, !!semantic.path?.length, true);
+    } else if (semantic.path?.length && source.id !== target.id) {
+      points = commit(
+        routeThrough(from.point, semantic.path, to.point, from.side, to.side),
+        true,
+        false,
       );
-    else
-      points = routeBetween(
-        allNodes.get(semantic.source)!,
-        allNodes.get(semantic.target)!,
-        nodes,
-        doc.layout.direction === 'DOWN',
-        semantic.source === semantic.target,
-        edgeStyle.sourcePort,
-        edgeStyle.targetPort,
+    } else if (source.id === target.id) {
+      points = commit(
+        routeBetween(
+          source,
+          target,
+          nodes,
+          down,
+          true,
+          from.side,
+          to.side,
+          from.index,
+          to.index,
+          from.count,
+          to.count,
+        ),
+        false,
+        false,
       );
-    if (
-      edgeStyle.sourcePort ||
-      edgeStyle.targetPort ||
-      doc.layout.mode === 'grid' ||
-      [semantic.source, semantic.target].some((id) =>
-        ['diamond', 'ellipse', 'pill'].includes(nodeStyles.get(id)?.shape ?? ''),
-      ) ||
-      (pinned &&
-        (allNodes.get(semantic.source)!.pinned ||
-          allNodes.get(semantic.target)!.pinned ||
-          nodes.some(
-            (n) => n.pinned && points.some((p, i) => i > 0 && segmentHitsBox(points[i - 1], p, n)),
-          )))
-    ) {
-      points = routeBetween(
-        allNodes.get(semantic.source)!,
-        allNodes.get(semantic.target)!,
-        nodes,
-        doc.layout.direction === 'DOWN',
-        semantic.source === semantic.target,
-        edgeStyle.sourcePort,
-        edgeStyle.targetPort,
+    } else {
+      let kept: Point[] | null = null;
+      if (elkPoints && doc.layout.mode !== 'grid') {
+        const adjusted =
+          retargetRoute(elkPoints, from.point, to.point, from.side, to.side) ??
+          (explicitSide ? null : elkPoints);
+        if (
+          adjusted &&
+          isOrthogonal(adjusted) &&
+          !blocked(adjusted) &&
+          !peers().some((route) => routesCross(adjusted, route))
+        )
+          kept = adjusted;
+      }
+      points = commit(
+        kept ??
+          routeBetween(
+            source,
+            target,
+            nodes,
+            down,
+            false,
+            from.side,
+            to.side,
+            from.index,
+            to.index,
+            from.count,
+            to.count,
+            peers(),
+          ),
+        false,
+        false,
       );
     }
     const style = edgeStyle;
-    if (style.routing === 'straight') {
-      const source = allNodes.get(semantic.source)!,
-        target = allNodes.get(semantic.target)!;
-      const center = (b: Box) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
-      const a = center(source),
-        b = center(target);
-      if (source.id !== target.id)
-        points = [
-          shapeBoundary(source, b, source.style?.shape),
-          shapeBoundary(target, a, target.style?.shape),
-        ];
-    }
     const edge: SceneEdge = { id: semantic.id, semantic, points, style };
     if (semantic.label) {
       const lines = wrapText(semantic.label, 156, 11),

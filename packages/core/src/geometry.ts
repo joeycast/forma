@@ -1,5 +1,8 @@
-import type { Point } from './document';
+import type { Point, PortCounts } from './document';
 import type { Box } from './scene';
+import type { PortSide } from './styles';
+const round = (n: number) => Math.round(n * 100) / 100;
+export const quantize = (p: Point): Point => ({ x: round(p.x), y: round(p.y) });
 export function overlaps(a: Box, b: Box, gap = 0) {
   return (
     a.x < b.x + b.width + gap &&
@@ -81,15 +84,183 @@ export function polylinePath(points: Point[], radius = 8): string {
   }
   return path + ` L ${points.at(-1)!.x} ${points.at(-1)!.y}`;
 }
-/** Orthogonal visibility-grid Dijkstra. Used when a human pin invalidates ELK routes. */
+export function centerPortIndex(count: number) {
+  return Math.floor((Math.max(1, count) - 1) / 2);
+}
+/** Evenly spaced. One point sits on the middle of the side; extra points spread toward the corners. */
+export function portPoint(box: Box, side: PortSide, index: number, count: number): Point {
+  const n = Math.max(1, count);
+  const i = Math.min(Math.max(0, index), n - 1);
+  const t = (i + 1) / (n + 1);
+  if (side === 'top') return quantize({ x: box.x + box.width * t, y: box.y });
+  if (side === 'bottom') return quantize({ x: box.x + box.width * t, y: box.y + box.height });
+  if (side === 'left') return quantize({ x: box.x, y: box.y + box.height * t });
+  return quantize({ x: box.x + box.width, y: box.y + box.height * t });
+}
+export function attachmentPoint(
+  box: Box,
+  ports: PortCounts | undefined,
+  side: PortSide | undefined,
+  index: number | undefined,
+  fallback: PortSide,
+) {
+  const chosen = side ?? fallback;
+  const count = ports?.[chosen] ?? 1;
+  const resolved = Math.min(index ?? centerPortIndex(count), count - 1);
+  return { side: chosen, index: resolved, count, point: portPoint(box, chosen, resolved, count) };
+}
+export function exitVector(side: PortSide, distance = 20): Point {
+  if (side === 'left') return { x: -distance, y: 0 };
+  if (side === 'right') return { x: distance, y: 0 };
+  if (side === 'top') return { x: 0, y: -distance };
+  return { x: 0, y: distance };
+}
+const aligned = (a: number, b: number) => Math.abs(a - b) < 0.51;
+export function isOrthogonal(points: Point[]) {
+  return points.every(
+    (p, i) => !i || aligned(p.x, points[i - 1].x) || aligned(p.y, points[i - 1].y),
+  );
+}
+/** One elbow. An exit side keeps the first leg on that axis. */
+export function elbow(a: Point, b: Point, fromSide?: PortSide): Point {
+  const horizontalFirst = { x: b.x, y: a.y };
+  if (fromSide === 'left' || fromSide === 'right') return horizontalFirst;
+  if (fromSide === 'top' || fromSide === 'bottom') return { x: a.x, y: b.y };
+  return Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) ? horizontalFirst : { x: a.x, y: b.y };
+}
+/** Orthogonal polyline through absolute waypoints. Endpoints stay on the chosen ports. */
+export function routeThrough(
+  source: Point,
+  waypoints: Point[],
+  target: Point,
+  sourceSide: PortSide,
+  targetSide: PortSide,
+): Point[] {
+  const points: Point[] = [quantize(source)];
+  const pushOrtho = (stop: Point, fromSide?: PortSide) => {
+    const prev = points[points.length - 1],
+      next = quantize(stop);
+    if (aligned(prev.x, next.x) || aligned(prev.y, next.y)) {
+      points.push(next);
+      return;
+    }
+    points.push(quantize(elbow(prev, next, fromSide)), next);
+  };
+  const out = exitVector(sourceSide, 20);
+  const first = waypoints[0];
+  const leaves =
+    !!first &&
+    ((sourceSide === 'right' && first.x > source.x + 1 && aligned(first.y, source.y)) ||
+      (sourceSide === 'left' && first.x < source.x - 1 && aligned(first.y, source.y)) ||
+      (sourceSide === 'bottom' && first.y > source.y + 1 && aligned(first.x, source.x)) ||
+      (sourceSide === 'top' && first.y < source.y - 1 && aligned(first.x, source.x)));
+  if (!leaves) pushOrtho({ x: source.x + out.x, y: source.y + out.y }, sourceSide);
+  for (const stop of waypoints) pushOrtho(stop);
+  const into = exitVector(targetSide, 20);
+  pushOrtho({ x: target.x + into.x, y: target.y + into.y });
+  pushOrtho(target);
+  return simplify(points);
+}
+/**
+ * Slide only the segments that already leave and enter on the requested sides.
+ * Returns null when keeping those bends would reverse a port or break orthogonality.
+ */
+export function retargetRoute(
+  points: Point[],
+  source: Point,
+  target: Point,
+  sourceSide: PortSide,
+  targetSide: PortSide,
+): Point[] | null {
+  const base = simplify(points.map((p) => ({ ...p })));
+  if (base.length < 4) return null;
+  const horizontalExit = sourceSide === 'left' || sourceSide === 'right';
+  const firstHorizontal = aligned(base[0].y, base[1].y);
+  if (horizontalExit !== firstHorizontal) return null;
+  const last = base.length - 1;
+  const horizontalEntry = targetSide === 'left' || targetSide === 'right';
+  const lastHorizontal = aligned(base[last].y, base[last - 1].y);
+  if (horizontalEntry !== lastHorizontal) return null;
+  const next = base.map((p) => ({ ...p }));
+  next[0] = quantize(source);
+  next[1] = firstHorizontal ? { x: next[1].x, y: next[0].y } : { x: next[0].x, y: next[1].y };
+  next[last] = quantize(target);
+  next[last - 1] = lastHorizontal
+    ? { x: next[last - 1].x, y: next[last].y }
+    : { x: next[last].x, y: next[last - 1].y };
+  const dx = next[1].x - next[0].x,
+    dy = next[1].y - next[0].y;
+  const backward =
+    (sourceSide === 'right' && dx < -0.5) ||
+    (sourceSide === 'left' && dx > 0.5) ||
+    (sourceSide === 'bottom' && dy < -0.5) ||
+    (sourceSide === 'top' && dy > 0.5);
+  const tdx = next[last].x - next[last - 1].x,
+    tdy = next[last].y - next[last - 1].y;
+  const arriveBad =
+    (targetSide === 'left' && tdx < -0.5) ||
+    (targetSide === 'right' && tdx > 0.5) ||
+    (targetSide === 'top' && tdy < -0.5) ||
+    (targetSide === 'bottom' && tdy > 0.5);
+  const simplified = simplify(next);
+  if (backward || arriveBad || !isOrthogonal(simplified)) return null;
+  return simplified;
+}
+export function routesCross(a: Point[], b: Point[]) {
+  for (let s = 1; s < a.length; s++)
+    for (let t = 1; t < b.length; t++)
+      if (segmentCross(a[s - 1], a[s], b[t - 1], b[t])) return true;
+  return false;
+}
+export function pointSegmentDistance(p: Point, a: Point, b: Point) {
+  const dx = b.x - a.x,
+    dy = b.y - a.y,
+    len = dx * dx + dy * dy;
+  const t = len ? Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len)) : 0;
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+/** Insert a corner on the closest segment. Anchors include the port endpoints; the result does not. */
+export function insertWaypoint(anchors: Point[], point: Point): Point[] {
+  let best = 1,
+    bestDist = Infinity;
+  for (let i = 1; i < anchors.length; i++) {
+    const dist = pointSegmentDistance(point, anchors[i - 1], anchors[i]);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = i;
+    }
+  }
+  const next = anchors.map((p) => ({ ...p }));
+  next.splice(best, 0, quantize(point));
+  return next.slice(1, -1);
+}
+export function departSide(from: Point, toward: Point): PortSide {
+  const dx = toward.x - from.x,
+    dy = toward.y - from.y;
+  if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 'right' : 'left';
+  return dy >= 0 ? 'bottom' : 'top';
+}
+export function arriveSide(from: Point, at: Point): PortSide {
+  const dx = at.x - from.x,
+    dy = at.y - from.y;
+  if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 'left' : 'right';
+  return dy >= 0 ? 'top' : 'bottom';
+}
+/** Which side an endpoint sits on. A hint point is the next bend, used to break corner ties. */
+/** Orthogonal visibility-grid Dijkstra. Crossing an occupied route is expensive; sharing a line is free. */
 export function routeBetween(
   source: Box,
   target: Box,
   obstacles: Box[],
   down: boolean,
   self = false,
-  sourcePort?: 'top' | 'right' | 'bottom' | 'left',
-  targetPort?: 'top' | 'right' | 'bottom' | 'left',
+  sourcePort?: PortSide,
+  targetPort?: PortSide,
+  sourceIndex?: number,
+  targetIndex?: number,
+  sourceCount = 1,
+  targetCount = 1,
+  peers: Point[][] = [],
 ): Point[] {
   if (self)
     return [
@@ -99,14 +270,10 @@ export function routeBetween(
       { x: source.x + source.width * 0.6, y: source.y - 28 },
       { x: source.x + source.width * 0.6, y: source.y },
     ];
-  const port = (box: Box, side: string) => ({
-    x: box.x + (side === 'left' ? 0 : side === 'right' ? box.width : box.width / 2),
-    y: box.y + (side === 'top' ? 0 : side === 'bottom' ? box.height : box.height / 2),
-  });
   const startSide = sourcePort ?? (down ? 'bottom' : 'right'),
     endSide = targetPort ?? (down ? 'top' : 'left');
-  const a = port(source, startSide),
-    b = port(target, endSide);
+  const a = portPoint(source, startSide, sourceIndex ?? centerPortIndex(sourceCount), sourceCount),
+    b = portPoint(target, endSide, targetIndex ?? centerPortIndex(targetCount), targetCount);
   const stub = (point: Point, side: string) => ({
     x: point.x + (side === 'left' ? -20 : side === 'right' ? 20 : 0),
     y: point.y + (side === 'top' ? -20 : side === 'bottom' ? 20 : 0),
@@ -119,16 +286,31 @@ export function routeBetween(
     width: o.width + 24,
     height: o.height + 24,
   }));
-  const xs = [...new Set([start.x, end.x, ...boxes.flatMap((o) => [o.x, o.x + o.width])])].sort(
-    (a, b) => a - b,
-  );
-  const ys = [...new Set([start.y, end.y, ...boxes.flatMap((o) => [o.y, o.y + o.height])])].sort(
-    (a, b) => a - b,
-  );
+  const peerPoints = peers.flat();
+  const xs = [
+    ...new Set(
+      [
+        start.x,
+        end.x,
+        ...boxes.flatMap((o) => [o.x, o.x + o.width]),
+        ...peerPoints.map((p) => p.x),
+      ].map(round),
+    ),
+  ].sort((a, b) => a - b);
+  const ys = [
+    ...new Set(
+      [
+        start.y,
+        end.y,
+        ...boxes.flatMap((o) => [o.y, o.y + o.height]),
+        ...peerPoints.map((p) => p.y),
+      ].map(round),
+    ),
+  ].sort((a, b) => a - b);
   const width = xs.length,
     count = width * ys.length;
-  const startIndex = ys.indexOf(start.y) * width + xs.indexOf(start.x),
-    endIndex = ys.indexOf(end.y) * width + xs.indexOf(end.x);
+  const startIndex = ys.indexOf(round(start.y)) * width + xs.indexOf(round(start.x)),
+    endIndex = ys.indexOf(round(end.y)) * width + xs.indexOf(round(end.x));
   const distances = new Float64Array(count * 2).fill(Infinity),
     previous = new Int32Array(count * 2).fill(-1);
   const visited = new Uint8Array(count * 2);
@@ -190,8 +372,22 @@ export function routeBetween(
       const p = { x: xs[x], y: ys[y] },
         q = { x: xs[nx], y: ys[ny] };
       if (boxes.some((o) => inside(q, o) || segmentHitsBox(p, q, o))) continue;
+      let penalty = 0;
+      for (const route of peers) {
+        for (let i = 1; i < route.length; i++)
+          if (segmentCross(p, q, route[i - 1], route[i])) {
+            penalty += 900;
+            break;
+          }
+        if (penalty >= 900) break;
+      }
       const next = (ny * width + nx) * 2 + nextDir,
-        cost = distance + Math.abs(p.x - q.x) + Math.abs(p.y - q.y) + (dir === nextDir ? 0 : 24);
+        cost =
+          distance +
+          Math.abs(p.x - q.x) +
+          Math.abs(p.y - q.y) +
+          (dir === nextDir ? 0 : 24) +
+          penalty;
       if (cost < distances[next]) {
         distances[next] = cost;
         previous[next] = state;

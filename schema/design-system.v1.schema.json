@@ -156,7 +156,16 @@
           "type": "string",
           "enum": [
             "left",
-            "center"
+            "center",
+            "right"
+          ]
+        },
+        "verticalAlign": {
+          "type": "string",
+          "enum": [
+            "top",
+            "middle",
+            "bottom"
           ]
         },
         "arrowStart": {
@@ -196,6 +205,16 @@
             "bottom",
             "left"
           ]
+        },
+        "sourceIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
+        },
+        "targetIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
         },
         "routing": {
           "type": "string",
@@ -300,7 +319,16 @@
           "type": "string",
           "enum": [
             "left",
-            "center"
+            "center",
+            "right"
+          ]
+        },
+        "verticalAlign": {
+          "type": "string",
+          "enum": [
+            "top",
+            "middle",
+            "bottom"
           ]
         },
         "arrowStart": {
@@ -340,6 +368,16 @@
             "bottom",
             "left"
           ]
+        },
+        "sourceIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
+        },
+        "targetIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
         },
         "routing": {
           "type": "string",
@@ -444,7 +482,16 @@
           "type": "string",
           "enum": [
             "left",
-            "center"
+            "center",
+            "right"
+          ]
+        },
+        "verticalAlign": {
+          "type": "string",
+          "enum": [
+            "top",
+            "middle",
+            "bottom"
           ]
         },
         "arrowStart": {
@@ -484,6 +531,16 @@
             "bottom",
             "left"
           ]
+        },
+        "sourceIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
+        },
+        "targetIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
         },
         "routing": {
           "type": "string",
@@ -595,7 +652,16 @@
             "type": "string",
             "enum": [
               "left",
-              "center"
+              "center",
+              "right"
+            ]
+          },
+          "verticalAlign": {
+            "type": "string",
+            "enum": [
+              "top",
+              "middle",
+              "bottom"
             ]
           },
           "arrowStart": {
@@ -635,6 +701,16 @@
               "bottom",
               "left"
             ]
+          },
+          "sourceIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 11
+          },
+          "targetIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 11
           },
           "routing": {
             "type": "string",
