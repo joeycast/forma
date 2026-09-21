@@ -1,7 +1,7 @@
 export const setupPrompt = `Set up Forma, the open-source local diagramming tool, and use it for my diagrams.
 
 1. Check that Node.js 22 or newer and npm are installed. Explain any missing prerequisite before changing system configuration.
-2. Install Forma from npm: npm install -g forma-diagrams
+2. Install Forma from its official release: npm install -g https://github.com/joeycast/forma/releases/download/v0.4.3/forma-diagrams-0.4.3.tgz
 3. Use ~/Forma as my diagram folder unless I specify another location. Keep related diagrams in subfolders. Never overwrite existing files during setup.
 4. Locate the installed package with npm root -g, then read forma-diagrams/skills/forma/SKILL.md. Read only the specialized diagram skills needed for my requests. Skills guide composition; a diagram type is not required. If your harness supports repository skills, follow its normal discovery process rather than assuming a specific agent platform.
 5. Start forma serve --directory ~/Forma and give me the local URL it prints. Keep that process running while I use the editor. This is a local file server, not an internet-facing service.
