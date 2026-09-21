@@ -12,6 +12,7 @@ export function AuthGate() {
     const channel = new BroadcastChannel('forma-auth');
     channel.onmessage = (event) => {
       if (event.data === 'signed-out') {
+        live = false;
         setAccount(null);
         setLoading(false);
       }

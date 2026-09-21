@@ -51,6 +51,8 @@ export async function createHostedServer(options: HostedOptions) {
     throw new Error(
       'Hosted mode requires HTTPS (HTTP is permitted only on loopback for development).',
     );
+  if (publicUrl.port === '0' && !development)
+    throw new Error('Port zero is only supported by loopback test servers.');
   const emails = new Set(
     (options.allowedEmails ?? []).map((s) => s.trim().toLowerCase()).filter(Boolean),
   );
