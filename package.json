@@ -1,15 +1,23 @@
 {
   "name": "forma-diagrams",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Local-first professional diagrams for agents and humans",
   "type": "module",
   "license": "MIT",
-  "private": true,
   "engines": {
     "node": ">=22"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "diagrams",
+    "diagramming",
+    "cli",
+    "agents"
+  ],
   "bin": {
-    "forma": "./packages/cli/bin.mjs"
+    "forma": "bin/forma"
   },
   "exports": {
     ".": "./packages/core/src/index.ts"
@@ -50,13 +58,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/joeycast/forma.git"
+    "url": "git+https://github.com/joeycast/forma.git"
   },
   "homepage": "https://github.com/joeycast/forma",
   "bugs": {
     "url": "https://github.com/joeycast/forma/issues"
   },
   "files": [
+    "bin",
     "dist",
     "packages",
     "public/fonts",

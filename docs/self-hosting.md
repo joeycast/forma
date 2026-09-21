@@ -95,15 +95,13 @@ Check the latest GitHub [release](https://github.com/joeycast/forma/releases) an
 
 ### Node (`forma host`)
 
-Installations today use the GitHub release tarball, which npm already understands:
-
 ```sh
-npm install -g https://github.com/joeycast/forma/releases/download/v0.4.2/forma-diagrams-0.4.2.tgz
+npm update -g forma-diagrams
 ```
 
 Restart the `forma host` process (or its supervisor). Leave `FORMA_DATA_DIR` pointed at the same disk. Verify `/healthz`, then sign in and open a known diagram.
 
-The npm registry name `forma-diagrams` is reserved in documentation for a future `npm install -g forma-diagrams` / `npm update -g forma-diagrams` flow. Until a registry package is published, do not install similarly named packages. Source checkouts update with `git fetch` and a checkout of the release tag, then `npm ci && npm run build`, then restart.
+Pin a version with `npm install -g forma-diagrams@0.4.3`. GitHub [releases](https://github.com/joeycast/forma/releases) still include a checksummed tarball. Source checkouts update with `git fetch` and a checkout of the release tag, then `npm ci && npm run build`, then restart. Install the package named `forma-diagrams`.
 
 ### Docker Compose
 
@@ -111,7 +109,7 @@ Keep the named volumes. Rebuild and recreate the app container from the tag you 
 
 ```sh
 git fetch
-git checkout v0.4.2
+git checkout v0.4.3
 docker compose --env-file deploy/.env -f deploy/compose.yml up -d --build
 ```
 
@@ -125,7 +123,7 @@ If Production is **not** connected to GitHub (CLI deploys only), update by deplo
 
 ```sh
 git fetch
-git checkout v0.4.2
+git checkout v0.4.3
 vercel --prod --yes
 ```
 

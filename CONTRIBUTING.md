@@ -26,6 +26,20 @@ change, and inspect both browser and CLI exports. Glyph advances deliberately om
 kerning: this errs toward a little extra space. Complex text shaping and scripts
 outside the bundled font's coverage are not yet a supported visual-quality target.
 
+## Releasing
+
+Bump `package.json` (and lockfile) together with CLI/help version strings and
+install docs. Tag `vX.Y.Z` and create a GitHub release with the packed tarball
+and `SHA256SUMS-X.Y.Z`. Publishing that GitHub release runs
+`.github/workflows/publish.yml`, which publishes `forma-diagrams` to the npm
+registry. The workflow needs repository secret `NPM_TOKEN` (an npm automation
+token with permission to publish `forma-diagrams`) and `id-token: write` for
+provenance.
+
+CLI and `forma host` operators install with `npm install -g forma-diagrams` and
+update with `npm update -g forma-diagrams`. Vercel and Docker still deploy a
+git tree or image build; npm does not roll those hosts forward.
+
 ## Review a visual change
 
 1. Render both `examples/*.forma.json` to PNG and SVG through the CLI.

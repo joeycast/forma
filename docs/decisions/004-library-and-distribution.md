@@ -24,7 +24,9 @@ A dedicated editor provides palette, typography size, corner, and spacing contro
 
 ## Distribution
 
-Start with GitHub source and a versioned npm-installable release tarball containing the built static editor, CLI, core, bundled fonts/licenses, examples, and repository skills. Runtime `tsx` belongs in production dependencies because the current package exposes TypeScript source. `npm install -g RELEASE_URL` provides `forma`; `forma serve` provides the editor without a build step for users. Validate an actual packed install before publishing the release. No npm-registry credentials, curl-to-shell bootstrapper, or Homebrew tap are required for this first distribution path.
+Start with GitHub source and a versioned npm-installable package containing the built static editor, CLI, core, bundled fonts/licenses, examples, and repository skills. Runtime `tsx` belongs in production dependencies because the current package exposes TypeScript source. `npm install -g forma-diagrams` provides `forma`; `forma serve` provides the editor without a build step for users. GitHub releases still attach a checksummed tarball. Validate an actual packed install before publishing. Homebrew is not required for this path.
+
+**2026-09-21:** The npm registry package `forma-diagrams` is the primary CLI/`forma host` install. GitHub Actions publishes it from a GitHub release with provenance. Vercel and Docker continue to deploy git trees or images.
 
 ## Later: organizational hosting
 
