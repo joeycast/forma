@@ -1818,3 +1818,128 @@ p {
   margin-bottom: 12px;
   cursor: pointer;
 }
+
+.library-location,
+.library-save,
+.library-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+.library-location strong {
+  flex: 1;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: var(--muted);
+}
+.library-filters .field,
+.library-save .field {
+  flex: 1;
+  margin: 0;
+}
+.library-list {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  margin: 16px 0;
+}
+.library-list > button {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 14px;
+  border: 0;
+  border-bottom: 1px solid #edf0f3;
+  background: white;
+  text-align: left;
+}
+.library-list > button:hover {
+  background: #f5f2fc;
+}
+.library-list span {
+  color: #677184;
+  font-size: 12px;
+}
+.library-empty {
+  padding: 24px;
+  color: #677184;
+  line-height: 1.6;
+}
+.library-confirm {
+  padding: 14px;
+  background: #fff7df;
+  border-radius: 8px;
+}
+.library-confirm button {
+  margin-right: 8px;
+}
+.design-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.color-field {
+  display: flex;
+  gap: 6px;
+}
+.color-field input[type='color'] {
+  flex: 0 0 38px;
+  width: 38px;
+  padding: 3px;
+}
+.color-field input:not([type='color']) {
+  min-width: 0;
+}
+.advanced-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin: 16px 0;
+}
+.design-json {
+  height: 230px;
+}
+.import-design {
+  display: inline-flex;
+  position: relative;
+  cursor: pointer;
+}
+.import-design input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  cursor: pointer;
+}
+.setup-prompt {
+  font-family: inherit;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 230px;
+}
+@media (max-width: 650px) {
+  .design-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .library-filters,
+  .library-save {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+fieldset.design-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+fieldset.design-fields:disabled {
+  opacity: 0.55;
+}

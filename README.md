@@ -10,7 +10,18 @@ The engine uses general nodes, shapes, groups, relationships, and content-sized 
 
 [Browse the rendered gallery](docs/gallery.md): architecture, decisions, organization, entities, timelines, mind maps, and a custom parallel-streams explanation. The same content is also rendered with a substantially different visual identity.
 
-## Run locally
+## Install
+
+Requires Node.js 22+. No build step is needed for a release install:
+
+```sh
+npm install -g https://github.com/joeycast/forma/releases/download/v0.3.0/forma-diagrams-0.3.0.tgz
+forma serve --directory ~/Forma
+```
+
+Open the printed URL. **Library** browses your folder and subfolders; **Save** writes back to the same files your agents edit. **Agent guide** provides a complete copyable setup prompt. **Create or edit design system** defines reusable visual identities. See [installation and everyday use](docs/install.md).
+
+## Develop locally
 
 Requires Node.js 22 or newer.
 
@@ -19,7 +30,7 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL in your terminal. No account, API key, database, or backend is needed. The editor runs in your browser; explicitly save the native document to keep a portable copy. Browser storage is local convenience, not a backup.
+Open the Vite URL in your terminal. No account, API key, database, or backend is needed. The editor runs in your browser; explicitly save the native document to keep a portable copy. Browser storage is local convenience, not a backup. For shared local files, build and run `node packages/cli/bin.mjs serve --directory ~/Forma`.
 
 ```sh
 npm run build
@@ -70,7 +81,7 @@ The native document is authoritative. A scene is derived geometry, and an SVG or
 
 This is a focused MVP, not a general drawing canvas. It supports up to 200 nodes, 600 edges, and 40 groups; smaller diagrams receive the most design attention. Human positions are absolute pins. Adding content around pins can create conflicts: inspect the result, adjust pins, or clear them explicitly to return control to automatic layout. Inspection is heuristic and does not certify aesthetic quality.
 
-SVG and PNG are implemented. CLI PNG exports use 2× scale and reject output above 32 million pixels before rasterization; use SVG or reduce diagram spread for larger documents. Editable draw.io, VSDX, PDF, and PowerPoint are future exporters; no promise of those formats is implied. They should consume the common scene and semantic document rather than rasterizing native objects by default. MCP, collaboration servers, accounts, raw illustration paths, and image imports are outside this phase. Custom font names are preserved, but only bundled IBM Plex Sans has portable measured rendering. ER examples use explicit text cardinality rather than native crow's-foot markers.
+SVG and PNG are implemented. CLI PNG exports use 2× scale and reject output above 32 million pixels before rasterization; use SVG or reduce diagram spread for larger documents. Editable draw.io, VSDX, PDF, and PowerPoint are future exporters; no promise of those formats is implied. They should consume the common scene and semantic document rather than rasterizing native objects by default. MCP, organizational accounts, raw illustration paths, and image imports are outside this phase. The optional local file server is loopback-only; Google sign-in and multi-user organizational hosting are deferred. Custom font names are preserved, but only bundled IBM Plex Sans has portable measured rendering. ER examples use explicit text cardinality rather than native crow's-foot markers.
 
 ```sh
 npm test

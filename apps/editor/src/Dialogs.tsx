@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { setupPrompt } from './setup-prompt';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { X, ArrowRight, Workflow, Blocks, FileJson, Terminal, Copy, Check } from 'lucide-react';
 import { parseDocument, serializeDocument, type Diagram } from '../../../packages/core/src';
 import { templates, gallery } from './storage';
@@ -8,7 +9,9 @@ export function Dialogs({
   doc,
   commit,
   notify,
+  children,
 }: {
+  children?: ReactNode;
   modal: string;
   close: () => void;
   doc: Diagram;
@@ -54,7 +57,9 @@ export function Dialogs({
         <button className="modal-close" aria-label="Close dialog" onClick={close}>
           <X size={19} />
         </button>
-        {modal === 'templates' ? (
+        {children ? (
+          children
+        ) : modal === 'templates' ? (
           <>
             <div className="modal-symbol">
               <Blocks size={24} />
@@ -214,30 +219,24 @@ export function Dialogs({
                 </div>
               </div>
             </div>
-            <div className="code-block">
-              <code>
-                npm run forma -- create --output system.forma.json
-                <br />
-                npm run forma -- inspect system.forma.json
-                <br />
-                npm run forma -- export system.forma.json --output system.svg
-              </code>
-              <button
-                aria-label="Copy CLI commands"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(
-                      'npm run forma -- create --output system.forma.json\nnpm run forma -- inspect system.forma.json\nnpm run forma -- export system.forma.json --output system.svg',
-                    );
-                    setCopied(true);
-                  } catch {
-                    notify('Clipboard unavailable. Select and copy the commands.');
-                  }
-                }}
-              >
-                {copied ? <Check size={15} /> : <Copy size={15} />}
-              </button>
-            </div>
+            <label className="field">
+              Give this prompt to your agent
+              <textarea className="setup-prompt" readOnly value={setupPrompt} rows={12} />
+            </label>
+            <button
+              className="primary"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(setupPrompt);
+                  setCopied(true);
+                } catch {
+                  notify('Clipboard unavailable. Select and copy the prompt above.');
+                }
+              }}
+            >
+              {copied ? <Check size={15} /> : <Copy size={15} />}{' '}
+              {copied ? 'Copied setup prompt' : 'Copy setup prompt'}
+            </button>
             <p className="modal-footnote">
               Agent guide: <code>skills/forma/SKILL.md</code>
               <br />

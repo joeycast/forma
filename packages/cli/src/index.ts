@@ -3,6 +3,8 @@ import { readFile, writeFile, rename, unlink } from 'node:fs/promises';
 import { resolve, extname, dirname, basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { homedir } from 'node:os';
+import { createLocalServer } from './server';
 import { Resvg } from '@resvg/resvg-js';
 import {
   parseDocument,
@@ -46,11 +48,28 @@ async function atomic(path: string, data: string | Uint8Array) {
 async function main() {
   const args = process.argv.slice(2);
   const command = args.shift();
+  if (command === 'serve') {
+    const options: Record<string, string> = {};
+    for (let i = 0; i < args.length; i += 2) {
+      if (!['--directory', '--port'].includes(args[i]) || !args[i + 1])
+        throw new Error('Usage: forma serve [--directory PATH] [--port 4242]');
+      options[args[i]] = args[i + 1];
+    }
+    const port = Number(options['--port'] ?? 4242);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid port');
+    const directory = resolve(options['--directory'] ?? join(homedir(), 'Forma'));
+    const server = await createLocalServer({ directory, assets: join(root, 'dist'), port });
+    output({ ok: true, command, url: `http://127.0.0.1:${port}`, directory });
+    for (const signal of ['SIGINT', 'SIGTERM'] as const)
+      process.once(signal, () => server.close(() => process.exit(0)));
+    return;
+  }
   if (!command || command === '--help' || command === 'help') {
     output({
       name: 'forma',
-      version: '0.2.0',
+      version: '0.3.0',
       usage: [
+        'forma serve [--directory ~/Forma] [--port 4242]',
         'forma create [--template architecture|flow|blank] --output diagram.forma.json',
         'forma migrate diagram.forma.json [--output upgraded.forma.json]',
         'forma style diagram.forma.json --system brand.json [--output styled.forma.json]',

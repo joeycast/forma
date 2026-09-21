@@ -72,7 +72,9 @@ export function Inspector({
   onSelect,
   tab,
   setTab,
+  onDesignSystems,
 }: {
+  onDesignSystems: () => void;
   doc: Diagram;
   scene: Scene | null;
   selected: string | null;
@@ -378,6 +380,9 @@ export function Inspector({
             )}
             <section>
               <h3>Design system</h3>
+              <button className="secondary full" onClick={onDesignSystems}>
+                Create or edit design system
+              </button>
               <label className="field">
                 Visual identity
                 <select

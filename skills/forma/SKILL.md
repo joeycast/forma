@@ -5,7 +5,7 @@ description: Create, modify, inspect, and export professional diagrams using For
 
 # Forma
 
-Use `node packages/cli/bin.mjs` from this repository; `--help` returns JSON. No account, service, MCP server, or particular agent harness is needed.
+Use `forma` after installation, or `node packages/cli/bin.mjs` from a source checkout; `--help` returns JSON. Run `forma serve --directory ~/Forma` to share a folder and its subfolders with the graphical Library. Reload files before agent edits and refresh the Library afterward. No account, service, MCP server, or particular agent harness is needed.
 
 Write a version 2 native document with stable node/edge/group IDs, short labels, relationships, and meaningful roles. No diagram type is required. `create --output diagram.forma.json` produces a blank document. The [format reference](../../docs/format.md) explains primitives, composition, style precedence, and patching.
 

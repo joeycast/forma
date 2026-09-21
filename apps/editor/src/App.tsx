@@ -1,3 +1,5 @@
+import { useLibrary, LibraryDialog } from './library';
+import { DesignSystems } from './DesignSystems';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowUpRight,
@@ -58,7 +60,8 @@ const kindIcons = {
   decision: GitBranch,
 };
 export function App() {
-  const { doc, commit, undo, redo, canUndo, canRedo, saved } = useDocument();
+  const { doc, commit, replace, undo, redo, canUndo, canRedo, saved } = useDocument();
+  const library = useLibrary();
   const [scene, setScene] = useState<Scene | null>(null),
     [busy, setBusy] = useState(true),
     [layoutError, setLayoutError] = useState('');
@@ -124,11 +127,22 @@ export function App() {
     setSelected(id);
     setInspectorTab('design');
   }, []);
-  const save = useCallback(() => {
+  const downloadNative = useCallback(() => {
     download(`${slug(docRef.current.title)}.forma.json`, serializeDocument(docRef.current));
     notify('Diagram saved as a native Forma document.');
     setMenu('');
   }, [doc, notify]);
+  const save = useCallback(() => {
+    if (!library.active) {
+      setModal('library');
+      return;
+    }
+    void library
+      .save(docRef.current)
+      .then(() => notify('Saved to library.'))
+      .catch((error) => notify(error instanceof Error ? error.message : 'Could not save.'));
+    setMenu('');
+  }, [library.save, library.active, notify]);
   const remove = useCallback(
     (ids: string[]) => {
       patch({
@@ -321,9 +335,21 @@ export function App() {
           <span className="local-badge">Local</span>
         </div>
         <div className="top-actions">
+          <button className="secondary" onClick={() => setModal('library')}>
+            Library
+          </button>
+          <button className="secondary" onClick={save}>
+            Save
+          </button>
           <span className={`saved-status ${!saved ? 'unsaved' : ''}`}>
             <span />
-            {saved ? 'Saved locally' : 'Download to save'}
+            {!saved
+              ? 'Recovery unavailable'
+              : library.active
+                ? library.dirty(doc)
+                  ? 'Unsaved changes'
+                  : 'Saved to library'
+                : 'Browser draft'}
           </span>
           <button
             className="secondary"
@@ -344,7 +370,7 @@ export function App() {
             {menu === 'export' && (
               <div className="dropdown export-menu">
                 <div className="dropdown-title">Take your diagram anywhere</div>
-                <button onClick={save}>
+                <button onClick={downloadNative}>
                   <FileJson size={16} />
                   <span>
                     Forma document<small>Editable JSON · preserves your changes</small>
@@ -646,6 +672,7 @@ export function App() {
           onSelect={select}
           tab={inspectorTab}
           setTab={setInspectorTab}
+          onDesignSystems={() => setModal('systems')}
         />
       </div>
       <input
@@ -659,6 +686,7 @@ export function App() {
           if (!file) return;
           try {
             if (file.size > 5_000_000) throw new Error('Choose a document smaller than 5 MB.');
+            library.detach();
             commit(parseDocument(JSON.parse(await file.text())));
             select(null);
             firstLayout.current = true;
@@ -675,12 +703,35 @@ export function App() {
           close={() => setModal('')}
           doc={doc}
           commit={(newDoc) => {
+            if (modal === 'templates') library.detach();
             commit(newDoc);
             select(null);
             firstLayout.current = true;
           }}
           notify={notify}
-        />
+        >
+          {modal === 'library' ? (
+            <LibraryDialog
+              library={library}
+              doc={doc}
+              onClose={() => setModal('')}
+              onOpen={(newDoc) => {
+                replace(newDoc);
+                select(null);
+                firstLayout.current = true;
+              }}
+            />
+          ) : modal === 'systems' ? (
+            <DesignSystems
+              doc={doc}
+              apply={(newDoc) => {
+                commit(newDoc);
+                notify('Design saved and applied. Element overrides preserved.');
+                setModal('');
+              }}
+            />
+          ) : undefined}
+        </Dialogs>
       )}
       {toast && (
         <div className="toast" role="status">

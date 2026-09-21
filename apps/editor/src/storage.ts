@@ -1,3 +1,5 @@
+import regularFont from '../../../public/fonts/IBMPlexSans-Regular.ttf?inline';
+import boldFont from '../../../public/fonts/IBMPlexSans-SemiBold.ttf?inline';
 import { useCallback, useEffect, useState } from 'react';
 import { parseDocument, serializeDocument, type Diagram } from '../../../packages/core/src';
 import platform from '../../../examples/platform.forma.json';
@@ -90,6 +92,13 @@ export function useDocument() {
   return {
     doc: history.current,
     commit,
+    replace: (doc: Diagram) =>
+      setHistory((h) => ({
+        revision: h.revision + 1,
+        past: [],
+        future: [],
+        current: parseDocument(doc),
+      })),
     undo,
     redo,
     canUndo: !!history.past.length,
@@ -115,18 +124,8 @@ export function slug(title: string) {
       .replace(/^-|-$/g, '') || 'diagram'
   );
 }
-const fontPromises: Record<string, Promise<string>> = {};
-export function localFont(bold = false) {
-  const file = bold ? 'IBMPlexSans-SemiBold.ttf' : 'IBMPlexSans-Regular.ttf';
-  return (fontPromises[file] ??= fetch(`${import.meta.env.BASE_URL}fonts/${file}`).then(
-    async (response) => {
-      if (!response.ok) throw new Error('The bundled font could not be loaded.');
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      let binary = '';
-      for (const b of bytes) binary += String.fromCharCode(b);
-      return `data:font/ttf;base64,${btoa(binary)}`;
-    },
-  ));
+export async function localFont(bold = false) {
+  return bold ? boldFont : regularFont;
 }
 export async function pngFromSvg(svg: string, width: number, height: number): Promise<Blob> {
   const image = new Image();
