@@ -41,7 +41,7 @@ npm run build
 npm run preview
 ```
 
-Deploy the generated `dist/` folder to any static host. Runtime rendering, editing, and export happen on the client. Package installation is the only required network step for local development.
+Deploy the generated `dist/` folder to any static host. Runtime rendering, editing, and export happen on the client. Package installation is the only required network step for local development. A Vercel project can also run hosted Google sign-in with Blob-backed private libraries; see [self-hosting](docs/self-hosting.md#vercel-personal-hosted-editor).
 
 ## Agent workflow
 

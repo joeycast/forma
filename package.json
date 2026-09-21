@@ -29,6 +29,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@resvg/resvg-js": "^2.6.2",
+    "@vercel/blob": "^2.8.0",
     "@xyflow/react": "^12.10.0",
     "elkjs": "^0.11.0",
     "google-auth-library": "^11.1.0",

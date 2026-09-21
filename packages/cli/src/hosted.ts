@@ -1,12 +1,14 @@
 import { createTokenStore, createAgentService } from './agent-access';
 import { z, ZodError } from 'zod';
-import { createServer, type IncomingMessage } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, lstat, readdir, writeFile, open, unlink } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createFileLibrary, HttpError } from './file-library';
 import { json, readBody, serveAsset } from './http';
 import { googleProvider, type IdentityProvider, type Identity, type LoginAttempt } from './google';
+import { loginCookieSchema, sessionCookieSchema, signCookie, verifyCookie } from './signed-cookie';
+import { blobLibraryFor, type BlobStore, type DiagramLibrary } from './blob-store';
 const token = () => randomBytes(32).toString('base64url');
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const cookies = (req: IncomingMessage) =>
@@ -17,8 +19,8 @@ const cookies = (req: IncomingMessage) =>
     }),
   );
 export type HostedOptions = {
-  directory: string;
-  assets: string;
+  directory?: string;
+  assets?: string;
   publicUrl: string;
   clientId?: string;
   clientSecret?: string;
@@ -30,11 +32,26 @@ export type HostedOptions = {
   maxFiles?: number;
   maxUsers?: number;
   enableMcp?: boolean;
+  listen?: boolean;
+  /** Signed cookies for serverless hosts. Memory sessions remain the Node default. */
+  sessionSecret?: string;
+  blobStore?: BlobStore;
+  serveAssets?: boolean;
   /** In-process test injection only. No environment variable enables a fake login. */
   provider?: IdentityProvider;
   now?: () => number;
   sessionMs?: number;
 };
+export type HostedHandler = {
+  handle(req: IncomingMessage, res: ServerResponse): Promise<void>;
+  close(): Promise<void>;
+};
+export async function createHostedServer(
+  options: HostedOptions & { listen: false },
+): Promise<HostedHandler>;
+export async function createHostedServer(
+  options: HostedOptions,
+): Promise<import('node:http').Server>;
 export async function createHostedServer(options: HostedOptions) {
   let publicUrl = new URL(options.publicUrl);
   if (
@@ -76,28 +93,35 @@ export async function createHostedServer(options: HostedOptions) {
     maxUsers < 1
   )
     throw new Error('Invalid storage limits. Max files must be 1–1000.');
-  const directory = resolve(options.directory);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  const lockPath = join(directory, '.forma-host.lock');
-  let lock;
-  try {
-    lock = await open(lockPath, 'wx', 0o600);
-    await lock.writeFile(String(process.pid));
-  } catch {
-    throw new Error(
-      'Hosted data directory is already locked. Stop the other process; after a crash, verify it is stopped before removing .forma-host.lock.',
-    );
-  }
+  const signed = !!options.sessionSecret;
+  const blobStore = options.blobStore;
+  if (!options.directory && !blobStore)
+    throw new Error('Hosted mode needs a data directory or a blob store.');
+  const directory = options.directory ? resolve(options.directory) : '';
+  let lock: Awaited<ReturnType<typeof open>> | undefined;
   const release = async () => {
+    if (!lock || !directory) return;
     await lock.close();
-    await unlink(lockPath).catch(() => {});
+    await unlink(join(directory, '.forma-host.lock')).catch(() => {});
   };
+  if (directory && !blobStore) {
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    const lockPath = join(directory, '.forma-host.lock');
+    try {
+      lock = await open(lockPath, 'wx', 0o600);
+      await lock.writeFile(String(process.pid));
+    } catch {
+      throw new Error(
+        'Hosted data directory is already locked. Stop the other process; after a crash, verify it is stopped before removing .forma-host.lock.',
+      );
+    }
+  }
   try {
     const now = options.now ?? Date.now,
       sessionMs = options.sessionMs ?? 12 * 60 * 60 * 1000;
     const pending = new Map<string, LoginAttempt & { expires: number }>();
     const sessions = new Map<string, { identity: Identity; expires: number }>();
-    const libraries = new Map<string, Awaited<ReturnType<typeof createFileLibrary>>>();
+    const libraries = new Map<string, DiagramLibrary>();
     let registrations = Promise.resolve();
     const sessionName = development ? 'forma-session' : '__Host-forma-session';
     const stateName = development ? 'forma-state' : '__Host-forma-state';
@@ -113,11 +137,13 @@ export async function createHostedServer(options: HostedOptions) {
       for (const [key, v] of pending) if (v.expires <= now()) pending.delete(key);
       for (const [key, v] of sessions) if (v.expires <= now()) sessions.delete(key);
     };
-    const usersRoot = join(directory, 'users');
-    await mkdir(usersRoot, { recursive: true, mode: 0o700 });
-    if ((await lstat(usersRoot)).isSymbolicLink())
-      throw new Error('Hosted users directory cannot be a symlink.');
     const libraryFor = async (identity: Identity) => {
+      if (blobStore)
+        return blobLibraryFor(blobStore, identity, { bytes: maxBytes, files: maxFiles }, maxUsers);
+      const usersRoot = join(directory, 'users');
+      await mkdir(usersRoot, { recursive: true, mode: 0o700 });
+      if ((await lstat(usersRoot)).isSymbolicLink())
+        throw new Error('Hosted users directory cannot be a symlink.');
       const id = hash(`google:${identity.sub}`);
       const operation = async () => {
         if (libraries.has(id)) return libraries.get(id)!;
@@ -160,9 +186,17 @@ export async function createHostedServer(options: HostedOptions) {
       );
       return result;
     };
-    const tokens = await createTokenStore(directory, now);
+    const tokens = await createTokenStore(
+      blobStore
+        ? {
+            load: async () => (await blobStore.get('agent-tokens.json'))?.text ?? null,
+            save: async (text) => blobStore.put('agent-tokens.json', text),
+          }
+        : directory,
+      now,
+    );
     let provider: IdentityProvider;
-    const server = createServer(async (req, res) => {
+    const handler = async (req: IncomingMessage, res: ServerResponse) => {
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Referrer-Policy', 'no-referrer');
       res.setHeader('X-Frame-Options', 'DENY');
@@ -182,8 +216,15 @@ export async function createHostedServer(options: HostedOptions) {
           throw new HttpError(403, 'Cross-origin access is not allowed.');
         const url = new URL(req.url ?? '/', publicUrl.origin);
         prune();
-        const jar = cookies(req),
-          session = sessions.get(hash(jar[sessionName] ?? ''));
+        const jar = cookies(req);
+        const signedSession = signed
+          ? verifyCookie(options.sessionSecret!, jar[sessionName], sessionCookieSchema)
+          : undefined;
+        const session = signed
+          ? signedSession && signedSession.expires > now()
+            ? signedSession
+            : undefined
+          : sessions.get(hash(jar[sessionName] ?? ''));
         if (req.method === 'GET' && url.pathname === '/healthz') {
           json(res, 200, { ok: true });
           return;
@@ -202,7 +243,8 @@ export async function createHostedServer(options: HostedOptions) {
           return;
         }
         if (req.method === 'GET' && url.pathname === '/auth/login') {
-          if (pending.size >= 1000) throw new HttpError(429, 'Sign-in is busy. Try again shortly.');
+          if (!signed && pending.size >= 1000)
+            throw new HttpError(429, 'Sign-in is busy. Try again shortly.');
           const state = token(),
             verifier = token(),
             attempt = {
@@ -212,16 +254,26 @@ export async function createHostedServer(options: HostedOptions) {
               challenge: createHash('sha256').update(verifier).digest('base64url'),
               expires: now() + 600_000,
             };
-          pending.set(state, attempt);
-          res.setHeader('Set-Cookie', cookie(stateName, state, 600));
+          if (!signed) pending.set(state, attempt);
+          res.setHeader(
+            'Set-Cookie',
+            cookie(stateName, signed ? signCookie(options.sessionSecret!, attempt) : state, 600),
+          );
           redirect(provider.authorize(attempt));
           return;
         }
         if (req.method === 'GET' && url.pathname === '/auth/callback') {
-          const state = url.searchParams.get('state') ?? '',
-            attempt = pending.get(state);
+          const state = url.searchParams.get('state') ?? '';
+          const attempt = signed
+            ? verifyCookie(options.sessionSecret!, jar[stateName], loginCookieSchema)
+            : pending.get(state);
           res.setHeader('Set-Cookie', cookie(stateName, '', 0));
-          if (!attempt || jar[stateName] !== state) {
+          if (
+            !attempt ||
+            attempt.state !== state ||
+            attempt.expires <= now() ||
+            (!signed && jar[stateName] !== state)
+          ) {
             redirect('/?authError=expired');
             return;
           }
@@ -243,11 +295,24 @@ export async function createHostedServer(options: HostedOptions) {
             return;
           }
           await libraryFor(identity);
+          const expires = now() + sessionMs;
+          if (signed) {
+            res.setHeader('Set-Cookie', [
+              cookie(stateName, '', 0),
+              cookie(
+                sessionName,
+                signCookie(options.sessionSecret!, { identity, expires }),
+                Math.ceil(sessionMs / 1000),
+              ),
+            ]);
+            redirect('/');
+            return;
+          }
           if (sessions.size >= 10_000)
             throw new HttpError(503, 'Session capacity reached. Try again later.');
           sessions.delete(hash(jar[sessionName] ?? ''));
           const value = token();
-          sessions.set(hash(value), { identity, expires: now() + sessionMs });
+          sessions.set(hash(value), { identity, expires });
           res.setHeader('Set-Cookie', [
             cookie(stateName, '', 0),
             cookie(sessionName, value, Math.ceil(sessionMs / 1000)),
@@ -315,7 +380,7 @@ export async function createHostedServer(options: HostedOptions) {
               return;
             }
             if (url.pathname === '/api/logout') {
-              sessions.delete(hash(jar[sessionName] ?? ''));
+              if (!signed) sessions.delete(hash(jar[sessionName] ?? ''));
               res.setHeader('Set-Cookie', cookie(sessionName, '', 0));
               json(res, 200, { ok: true });
               return;
@@ -355,7 +420,9 @@ export async function createHostedServer(options: HostedOptions) {
           }
           throw new HttpError(404, 'Unknown library operation.');
         }
-        await serveAsset(req, res, url, options.assets, 'hosted');
+        if (options.serveAssets !== false && options.assets)
+          await serveAsset(req, res, url, options.assets, 'hosted');
+        else throw new HttpError(404, 'Not found.');
       } catch (error) {
         const e = error as NodeJS.ErrnoException & { status?: number };
         if (
@@ -374,7 +441,25 @@ export async function createHostedServer(options: HostedOptions) {
                 : 'The server could not complete the request.',
         });
       }
-    });
+    };
+    if (options.listen === false) {
+      provider =
+        options.provider ??
+        googleProvider(
+          options.clientId ?? '',
+          options.clientSecret ?? '',
+          `${publicUrl.origin}/auth/callback`,
+        );
+      return {
+        handle: handler,
+        close: async () => {
+          sessions.clear();
+          pending.clear();
+          await release();
+        },
+      };
+    }
+    const server = createServer(handler);
     server.requestTimeout = 30_000;
     server.headersTimeout = 15_000;
     await new Promise<void>((resolve, reject) => {

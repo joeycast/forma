@@ -61,6 +61,32 @@ A release installation exposes the same command as `forma host` when the environ
 
 HTTP is allowed only for `localhost` or `127.0.0.1` development origins and binds to loopback. Google must have the matching loopback callback URI registered. Production uses HTTPS Secure cookies. Forma does not infer its public URL from untrusted forwarded headers. `/healthz` is a public health endpoint, still subject to the canonical Host check.
 
+## Vercel (personal hosted editor)
+
+The static Vercel deployment can run the same Google sign-in and private library as `forma host`, using [Vercel Blob](https://vercel.com/docs/vercel-blob) instead of a local disk. Sessions are signed cookies, so they work across serverless invocations. This is a personal/small-team host, not a replacement for a dedicated VM when you need a locked data directory.
+
+1. Create a Google **Web application** OAuth client. Authorized JavaScript origin and redirect URI:
+
+```
+https://YOUR-DEPLOYMENT.vercel.app
+https://YOUR-DEPLOYMENT.vercel.app/auth/callback
+```
+
+2. Create a private Blob store and set environment variables on the Vercel project (Production and Preview):
+
+| Variable                     | Meaning                                                                 |
+| ---------------------------- | ----------------------------------------------------------------------- |
+| `FORMA_HOSTED`               | `1` so the editor build includes the hosted sign-in shell               |
+| `FORMA_PUBLIC_URL`           | The stable `https://….vercel.app` origin (no path)                      |
+| `FORMA_GOOGLE_CLIENT_ID`     | Google Web client ID                                                    |
+| `FORMA_GOOGLE_CLIENT_SECRET` | Google client secret                                                    |
+| `FORMA_ALLOWED_EMAILS`       | Your Google account, comma-separated if several                         |
+| `FORMA_ALLOWED_DOMAINS`      | Optional Workspace `hd` values                                          |
+| `FORMA_SESSION_SECRET`       | Long random string; changing it signs everyone out                      |
+| `BLOB_READ_WRITE_TOKEN`      | Set automatically when a Blob store is linked to the project            |
+
+3. Redeploy. Visit the production origin, sign in with an allowed Google account, and save a diagram in Library. Agent tokens from **Agent access** still work with `FORMA_REMOTE_URL` set to that origin.
+
 ## Daily use and agents
 
 After sign-in, Library opens to your private files. Create diagrams, organize them with relative paths such as `engineering/platform.forma.json`, and save explicitly. Reloading opens Library rather than restoring a private draft from browser storage. Unsaved hosted edits do not survive a page reload or sign-out; use Save or export a native copy first. Sign-out also closes authenticated views in other tabs.

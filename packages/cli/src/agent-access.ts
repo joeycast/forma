@@ -2,7 +2,7 @@ import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { readFile, writeFile, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { HttpError, type createFileLibrary } from './file-library';
+import { HttpError } from './file-library';
 import type { Identity } from './google';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -42,17 +42,38 @@ const recordSchema = z.object({
 export type Grant = z.infer<typeof recordSchema>;
 const fileSchema = z.object({ version: z.literal(1), tokens: z.array(recordSchema).max(10000) });
 
-export async function createTokenStore(directory: string, now: () => number = Date.now) {
+export type TokenIO = { load(): Promise<string | null>; save(text: string): Promise<void> };
+function fileTokenIO(directory: string): TokenIO {
   const path = join(directory, 'agent-tokens.json');
+  return {
+    async load() {
+      try {
+        return await readFile(path, 'utf8');
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw new Error(
+          'Cannot read agent token registry. Restore or repair it before starting hosted mode.',
+        );
+      }
+    },
+    async save(text) {
+      const tmp = join(directory, `.tokens-${randomBytes(8).toString('hex')}.tmp`);
+      try {
+        await writeFile(tmp, text, { flag: 'wx', mode: 0o600 });
+        await rename(tmp, path);
+      } finally {
+        await unlink(tmp).catch(() => {});
+      }
+    },
+  };
+}
+export async function createTokenStore(source: string | TokenIO, now: () => number = Date.now) {
+  const io = typeof source === 'string' ? fileTokenIO(source) : source;
   let records: Grant[] = [];
-  try {
-    records = fileSchema.parse(JSON.parse(await readFile(path, 'utf8'))).tokens;
+  const loaded = await io.load();
+  if (loaded) {
+    records = fileSchema.parse(JSON.parse(loaded)).tokens;
     for (const r of records) relativePath(r.folder, true);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== 'ENOENT')
-      throw new Error(
-        'Cannot read agent token registry. Restore or repair it before starting hosted mode.',
-      );
   }
   let mutations = Promise.resolve();
   const publicRecord = ({ digest: _digest, identity: _identity, ...value }: Grant) => value;
@@ -65,17 +86,8 @@ export async function createTokenStore(directory: string, now: () => number = Da
     return result;
   };
   const persist = async (next: Grant[]) => {
-    const tmp = join(directory, `.tokens-${randomBytes(8).toString('hex')}.tmp`);
-    try {
-      await writeFile(tmp, JSON.stringify({ version: 1, tokens: next }) + '\n', {
-        flag: 'wx',
-        mode: 0o600,
-      });
-      await rename(tmp, path);
-      records = next;
-    } finally {
-      await unlink(tmp).catch(() => {});
-    }
+    await io.save(JSON.stringify({ version: 1, tokens: next }) + '\n');
+    records = next;
   };
   return {
     list: (identity: Identity) =>
@@ -148,7 +160,17 @@ export async function createTokenStore(directory: string, now: () => number = Da
 
 export function createAgentService(
   getGrant: () => Grant,
-  libraryFor: (identity: Identity) => Promise<Awaited<ReturnType<typeof createFileLibrary>>>,
+  libraryFor: (identity: Identity) => Promise<{
+    workspace: string;
+    list: () => Promise<{ items: { path: string }[]; folders: string[] }>;
+    read: (path: string, workspace: string) => Promise<{ document: unknown; revision: string }>;
+    save: (data: {
+      path: string;
+      document: unknown;
+      revision: string | null;
+      workspace: string;
+    }) => Promise<{ path: string; revision: string; workspace: string }>;
+  }>,
 ) {
   const check = (path: string, write = false) => {
     relativePath(path);
