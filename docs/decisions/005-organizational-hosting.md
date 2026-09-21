@@ -6,7 +6,7 @@ Status: accepted, 2026-09-21.
 
 `forma host` is an explicitly configured, authenticated deployment mode. `forma serve` remains a loopback local-folder adapter; static hosting remains account-free. Authentication and storage do not enter the rendering core or native document format. Version 1 and 2 diagrams continue to work unchanged.
 
-This first hosted release provides private libraries for individual users of one organization. Shared folders, team ACLs, real-time collaboration, public links, and agent API tokens are outside this release. An agent can edit an exported native file; a user imports and saves it back. Trusted server-side automation can work on the same ordinary files with the existing CLI.
+This first hosted release provides private libraries for individual users of one organization. Shared folders, team ACLs, real-time collaboration, and public links are outside this release. File export/import remains available. Direct agent access uses user-issued tokens described in [ADR 006](006-hosted-agent-access.md).
 
 ## Google identity
 

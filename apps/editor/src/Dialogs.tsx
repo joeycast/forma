@@ -20,7 +20,7 @@ export function Dialogs({
   notify: (s: string) => void;
 }) {
   const agentPrompt = hosted
-    ? `Help me create or update a Forma diagram for my organization’s workspace at ${location.origin}. Install Forma using the installation instructions in https://github.com/joeycast/forma and read its bundled skills/forma/SKILL.md. Work on the native .forma.json document I provide, preserving stable IDs and human positioning/styles. Validate, inspect, render, and visually refine it. Return the edited native file and requested exports. I will use Open to import it and Save to store it in my private server library. Do not request my browser cookies or Google credentials. For edits, ask for the latest exported native document before changing anything.`
+    ? `Help me create or update a Forma diagram for my organization’s workspace at ${location.origin}. Install Forma using the installation instructions in https://github.com/joeycast/forma and read its bundled skills/forma/SKILL.md. If I give you a hosted agent token from Agent access, set FORMA_REMOTE_URL to that origin and FORMA_AGENT_TOKEN_FILE to a private chmod 600 file containing the token, then use forma remote or forma mcp. Never request my Google credentials or browser cookies. Pull or read the latest revision before editing. Preserve stable IDs and human positioning/styles in presentation.nodes. Validate, inspect, render, and visually refine the native .forma.json document, then push with the bound revision. If we are exchanging files instead, I will export the native document, you will return the edited file, and I will Open then Save it in my private server library.`
     : setupPrompt;
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -245,7 +245,7 @@ export function Dialogs({
               Agent guide: <code>skills/forma/SKILL.md</code>
               <br />
               {hosted
-                ? 'Your agent works with exported native files. Google credentials stay in your browser.'
+                ? 'Use Agent access for a scoped token, or export a native file. Google credentials stay in your browser.'
                 : 'No account. No API key. No service to depend on.'}
             </p>
           </>

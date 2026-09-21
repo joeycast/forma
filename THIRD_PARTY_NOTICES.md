@@ -14,6 +14,7 @@ Forma's original code is MIT licensed. Third-party code and assets retain their 
 | Vite                       | Development and static build        | [MIT](https://github.com/vitejs/vite/blob/main/LICENSE)                                                          |
 | TypeScript                 | Type checking                       | [Apache-2.0](https://github.com/microsoft/TypeScript/blob/main/LICENSE.txt)                                      |
 | Google Auth Library        | Hosted Google identity verification | [Apache-2.0](https://github.com/googleapis/google-cloud-node/tree/main/core/packages/google-auth-library-nodejs) |
+| MCP TypeScript SDK         | Optional hosted agent adapter       | [MIT](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/LICENSE)                                  |
 | tsx                        | TypeScript CLI runtime              | [MIT](https://github.com/privatenumber/tsx/blob/master/LICENSE)                                                  |
 
 ELK and resvg remain separate third-party components under their upstream terms. There are no proprietary runtime dependencies. Local/static modes need no operated service; optional hosted sign-in uses Google identity through the organization’s own OAuth client. This table covers principal direct dependencies, not every transitive package; use installed package licenses and the lockfile for a complete redistribution inventory.

@@ -5,7 +5,9 @@ description: Create, modify, inspect, and export professional diagrams using For
 
 # Forma
 
-Use `forma` after installation, or `node packages/cli/bin.mjs` from a source checkout; `--help` returns JSON. Run `forma serve --directory ~/Forma` to share a folder and its subfolders with the graphical Library. Reload files before agent edits and refresh the Library afterward. No account, service, MCP server, or particular agent harness is needed.
+Use `forma` after installation, or `node packages/cli/bin.mjs` from a source checkout; `--help` returns JSON. Run `forma serve --directory ~/Forma` to share a folder and its subfolders with the graphical Library. Reload files before agent edits and refresh the Library afterward. No account or particular agent harness is needed for local use.
+
+If the user gives a hosted origin and agent token, set `FORMA_REMOTE_URL` and `FORMA_AGENT_TOKEN_FILE` (private `chmod 600` file) and use `forma remote` or `forma mcp`. Never use Google cookies. Pull/read the latest revision, preserve IDs and `presentation.nodes`, then push with the bound revision. See [hosted access](references/hosted.md).
 
 Write a version 2 native document with stable node/edge/group IDs, short labels, relationships, and meaningful roles. No diagram type is required. `create --output diagram.forma.json` produces a blank document. The [format reference](../../docs/format.md) explains primitives, composition, style precedence, and patching.
 

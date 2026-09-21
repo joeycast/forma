@@ -1,4 +1,5 @@
-import { ZodError } from 'zod';
+import { createTokenStore, createAgentService } from './agent-access';
+import { z, ZodError } from 'zod';
 import { createServer, type IncomingMessage } from 'node:http';
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, lstat, readdir, writeFile, open, unlink } from 'node:fs/promises';
@@ -28,6 +29,7 @@ export type HostedOptions = {
   maxBytes?: number;
   maxFiles?: number;
   maxUsers?: number;
+  enableMcp?: boolean;
   /** In-process test injection only. No environment variable enables a fake login. */
   provider?: IdentityProvider;
   now?: () => number;
@@ -158,6 +160,7 @@ export async function createHostedServer(options: HostedOptions) {
       );
       return result;
     };
+    const tokens = await createTokenStore(directory, now);
     let provider: IdentityProvider;
     const server = createServer(async (req, res) => {
       res.setHeader('Cache-Control', 'no-store');
@@ -252,6 +255,43 @@ export async function createHostedServer(options: HostedOptions) {
           redirect('/');
           return;
         }
+        if (url.pathname.startsWith('/api/agent/') || url.pathname === '/mcp') {
+          if (url.pathname === '/mcp' && !options.enableMcp)
+            throw new HttpError(404, 'MCP is not enabled on this host.');
+          const getGrant = () => {
+            const grant = tokens.authenticate(req.headers.authorization);
+            if (!allowed(grant.identity))
+              throw new HttpError(403, 'This account is no longer admitted to the workspace.');
+            return grant;
+          };
+          getGrant();
+          const service = createAgentService(getGrant, libraryFor);
+          if (url.pathname === '/mcp') {
+            if (req.method !== 'POST')
+              throw new HttpError(405, 'Use MCP Streamable HTTP POST requests.');
+            const body = await readBody(req, false);
+            const { handleMcp } = await import('./mcp');
+            await handleMcp(req, res, body, service);
+            return;
+          }
+          if (req.method === 'GET' && url.pathname === '/api/agent/me') {
+            json(res, 200, service.me());
+            return;
+          }
+          if (req.method === 'GET' && url.pathname === '/api/agent/diagrams') {
+            json(res, 200, await service.list());
+            return;
+          }
+          if (req.method === 'GET' && url.pathname === '/api/agent/document') {
+            json(res, 200, await service.read(url.searchParams.get('path') ?? ''));
+            return;
+          }
+          if (req.method === 'POST' && url.pathname === '/api/agent/document') {
+            json(res, 200, await service.write(await readBody(req, false)));
+            return;
+          }
+          throw new HttpError(404, 'Unknown agent operation.');
+        }
         if (url.pathname.startsWith('/api/')) {
           if (!session || !allowed(session.identity))
             throw new HttpError(
@@ -262,6 +302,18 @@ export async function createHostedServer(options: HostedOptions) {
             if (req.headers.origin !== publicUrl.origin)
               throw new HttpError(403, 'A same-origin request is required.');
             const data = await readBody(req);
+            if (url.pathname === '/api/tokens') {
+              json(res, 201, await tokens.create(session.identity, data));
+              return;
+            }
+            if (url.pathname === '/api/tokens/revoke') {
+              json(
+                res,
+                200,
+                await tokens.revoke(session.identity, z.object({ id: z.string() }).parse(data).id),
+              );
+              return;
+            }
             if (url.pathname === '/api/logout') {
               sessions.delete(hash(jar[sessionName] ?? ''));
               res.setHeader('Set-Cookie', cookie(sessionName, '', 0));
@@ -273,6 +325,10 @@ export async function createHostedServer(options: HostedOptions) {
               return;
             }
             throw new HttpError(405, 'This operation is not available in hosted mode.');
+          }
+          if (req.method === 'GET' && url.pathname === '/api/tokens') {
+            json(res, 200, { tokens: tokens.list(session.identity), mcp: !!options.enableMcp });
+            return;
           }
           const library = await libraryFor(session.identity);
           if (req.method === 'GET' && url.pathname === '/api/library') {
@@ -302,6 +358,11 @@ export async function createHostedServer(options: HostedOptions) {
         await serveAsset(req, res, url, options.assets, 'hosted');
       } catch (error) {
         const e = error as NodeJS.ErrnoException & { status?: number };
+        if (
+          e.status === 401 &&
+          (req.url?.startsWith('/api/agent/') || req.url?.split('?')[0] === '/mcp')
+        )
+          res.setHeader('WWW-Authenticate', 'Bearer realm="Forma agents"');
         const bad = e instanceof SyntaxError || e instanceof ZodError;
         json(res, e.status ?? (e.code === 'ENOENT' ? 404 : bad ? 400 : 500), {
           error: e.status

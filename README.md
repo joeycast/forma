@@ -15,7 +15,7 @@ The engine uses general nodes, shapes, groups, relationships, and content-sized 
 Requires Node.js 22+. No build step is needed for a release install:
 
 ```sh
-npm install -g https://github.com/joeycast/forma/releases/download/v0.4.0/forma-diagrams-0.4.0.tgz
+npm install -g https://github.com/joeycast/forma/releases/download/v0.4.1/forma-diagrams-0.4.1.tgz
 forma serve --directory ~/Forma
 ```
 
@@ -23,7 +23,7 @@ Open the printed URL. **Library** browses your folder and subfolders; **Save** w
 
 ## Host for your organization
 
-Forma also supports Google sign-in and private server-backed libraries. Your organization supplies its own Google OAuth client, server, and durable disk. The authenticated `forma host` command is separate from the local `forma serve` adapter. A Docker Compose/Caddy recipe provides HTTPS hosting without a database or Forma-operated service. See the [self-hosting guide](docs/self-hosting.md) for setup, admission allowlists, backups, and limits.
+Forma also supports Google sign-in and private server-backed libraries. Your organization supplies its own Google OAuth client, server, and durable disk. The authenticated `forma host` command is separate from the local `forma serve` adapter. A Docker Compose/Caddy recipe provides HTTPS hosting without a database or Forma-operated service. Signed-in users can issue scoped agent tokens from **Agent access** and connect `forma remote` or `forma mcp` without sharing Google credentials. See the [self-hosting guide](docs/self-hosting.md) for setup, admission allowlists, backups, agent tokens, and limits.
 
 ## Develop locally
 
@@ -85,7 +85,7 @@ The native document is authoritative. A scene is derived geometry, and an SVG or
 
 This is a focused MVP, not a general drawing canvas. It supports up to 200 nodes, 600 edges, and 40 groups; smaller diagrams receive the most design attention. Human positions are absolute pins. Adding content around pins can create conflicts: inspect the result, adjust pins, or clear them explicitly to return control to automatic layout. Inspection is heuristic and does not certify aesthetic quality.
 
-SVG and PNG are implemented. CLI PNG exports use 2× scale and reject output above 32 million pixels before rasterization; use SVG or reduce diagram spread for larger documents. Editable draw.io, VSDX, PDF, and PowerPoint are future exporters; no promise of those formats is implied. They should consume the common scene and semantic document rather than rasterizing native objects by default. MCP, shared team folders, raw illustration paths, and image imports are outside this phase. The optional local file server is loopback-only; a separate authenticated hosted mode adds Google sign-in and private user libraries. Custom font names are preserved, but only bundled IBM Plex Sans has portable measured rendering. ER examples use explicit text cardinality rather than native crow's-foot markers.
+SVG and PNG are implemented. CLI PNG exports use 2× scale and reject output above 32 million pixels before rasterization; use SVG or reduce diagram spread for larger documents. Editable draw.io, VSDX, PDF, and PowerPoint are future exporters; no promise of those formats is implied. They should consume the common scene and semantic document rather than rasterizing native objects by default. Shared team folders, raw illustration paths, and image imports are outside this phase. The optional local file server is loopback-only; a separate authenticated hosted mode adds Google sign-in, private user libraries, and optional agent tokens with a CLI/MCP adapter. Custom font names are preserved, but only bundled IBM Plex Sans has portable measured rendering. ER examples use explicit text cardinality rather than native crow's-foot markers.
 
 ```sh
 npm test

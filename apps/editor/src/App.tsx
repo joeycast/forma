@@ -1,3 +1,4 @@
+import { AgentAccess } from './AgentAccess';
 import { hosted } from './hosting';
 import type { Account } from './AuthGate';
 import { useLibrary, LibraryDialog } from './library';
@@ -350,6 +351,11 @@ export function App({ account }: { account?: Account }) {
           <span className="local-badge">{hosted ? 'Hosted' : 'Local'}</span>
         </div>
         <div className="top-actions">
+          {account && (
+            <button className="secondary" onClick={() => setModal('access')}>
+              Agent access
+            </button>
+          )}
           {account && (
             <button
               className="secondary account-button"
@@ -757,6 +763,8 @@ export function App({ account }: { account?: Account }) {
                 setModal('');
               }}
             />
+          ) : modal === 'access' ? (
+            <AgentAccess />
           ) : modal === 'signout' ? (
             <>
               <h2 id="modal-title">Sign out of Forma?</h2>

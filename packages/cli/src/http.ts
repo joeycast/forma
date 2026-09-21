@@ -10,9 +10,9 @@ export function json(res: ServerResponse, status: number, value: unknown) {
   });
   res.end(JSON.stringify(value));
 }
-export async function readBody(req: IncomingMessage) {
+export async function readBody(req: IncomingMessage, requireHeader = true) {
   if (
-    req.headers['x-forma-request'] !== '1' ||
+    (requireHeader && req.headers['x-forma-request'] !== '1') ||
     !req.headers['content-type']?.startsWith('application/json')
   )
     throw new HttpError(405, 'Unsupported library request.');

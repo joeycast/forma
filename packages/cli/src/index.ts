@@ -48,6 +48,18 @@ async function atomic(path: string, data: string | Uint8Array) {
 async function main() {
   const args = process.argv.slice(2);
   const command = args.shift();
+  if (command === 'remote') {
+    const { remoteCommand } = await import('./remote');
+    output(await remoteCommand(args));
+    return;
+  }
+  if (command === 'mcp') {
+    if (args.length)
+      throw new Error('forma mcp uses FORMA_REMOTE_URL and agent token environment variables.');
+    const { serveMcpStdio } = await import('./remote');
+    await serveMcpStdio();
+    return;
+  }
   if (command === 'host') {
     if (args.length)
       throw new Error(
@@ -80,6 +92,7 @@ async function main() {
       maxBytes: Number(process.env.FORMA_USER_BYTES ?? 100_000_000),
       maxFiles: Number(process.env.FORMA_USER_FILES ?? 1000),
       maxUsers: Number(process.env.FORMA_MAX_USERS ?? 500),
+      enableMcp: process.env.FORMA_ENABLE_MCP === 'true',
     });
     output({ ok: true, command, url });
     for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => server.close());
@@ -104,10 +117,12 @@ async function main() {
   if (!command || command === '--help' || command === 'help') {
     output({
       name: 'forma',
-      version: '0.4.0',
+      version: '0.4.1',
       usage: [
         'forma serve [--directory ~/Forma] [--port 4242]',
         'forma host (configured with FORMA_* environment variables)',
+        'forma remote whoami|list|pull PATH --output FILE|push FILE [--create --path PATH]',
+        'forma mcp (stdio bridge to the authenticated remote API)',
         'forma create [--template architecture|flow|blank] --output diagram.forma.json',
         'forma migrate diagram.forma.json [--output upgraded.forma.json]',
         'forma style diagram.forma.json --system brand.json [--output styled.forma.json]',

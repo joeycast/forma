@@ -57,6 +57,7 @@ A release installation exposes the same command as `forma host` when the environ
 | `FORMA_USER_BYTES`           | `100000000` bytes per user                                                              |
 | `FORMA_USER_FILES`           | `1000` diagrams per user, maximum 1000                                                  |
 | `FORMA_MAX_USERS`            | `500` user directories                                                                  |
+| `FORMA_ENABLE_MCP`           | `true` enables the optional Streamable HTTP MCP endpoint at `/mcp`; default is off      |
 
 HTTP is allowed only for `localhost` or `127.0.0.1` development origins and binds to loopback. Google must have the matching loopback callback URI registered. Production uses HTTPS Secure cookies. Forma does not infer its public URL from untrusted forwarded headers. `/healthz` is a public health endpoint, still subject to the canonical Host check.
 
@@ -64,9 +65,20 @@ HTTP is allowed only for `localhost` or `127.0.0.1` development origins and bind
 
 After sign-in, Library opens to your private files. Create diagrams, organize them with relative paths such as `engineering/platform.forma.json`, and save explicitly. Reloading opens Library rather than restoring a private draft from browser storage. Unsaved hosted edits do not survive a page reload or sign-out; use Save or export a native copy first. Sign-out also closes authenticated views in other tabs.
 
-Use **Agent guide → Copy setup prompt** for the hosted workflow: export the native document, have an agent edit it with the CLI, import it through **Open**, then save. Opening an imported file detaches its old library binding; save to a new path if one already exists. To replace an existing file without losing revision protection, first open its latest server version and use **View document source** to apply the agent's full JSON, then Save. Re-read/export the latest file before each agent edit.
+Use **Agent access** to issue a scoped, revocable token for a user’s own library. The agent never receives Google credentials or browser cookies. Set `FORMA_REMOTE_URL` to this origin and store the token in a private `chmod 600` file referenced by `FORMA_AGENT_TOKEN_FILE` (or `FORMA_AGENT_TOKEN` in the agent’s secret environment). Then:
 
-Applied design systems live inside saved diagrams. In hosted mode, saved design presets last for the page session; export the design JSON to reuse it elsewhere. Shared organizational preset administration and remote agent tokens are not included yet.
+```sh
+forma remote whoami
+forma remote list
+forma remote pull engineering/platform.forma.json --output platform.forma.json
+forma remote push platform.forma.json
+```
+
+`forma mcp` is a local stdio bridge over that same authenticated API. Set `FORMA_ENABLE_MCP=true` only if you also want Streamable HTTP clients to POST to `/mcp` with a Bearer token. This release does not implement MCP OAuth discovery; prefer the stdio bridge when the client cannot set HTTP headers. Revoking a token in the editor blocks new operations immediately. File export/import still works if a user does not want to issue a token.
+
+Opening an imported file detaches its old library binding; save to a new path if one already exists. Remote pull/push keep a `.forma-remote.json` sidecar with the server, owner, path, and revision; a conflict means reread and reconcile rather than retrying blindly.
+
+Applied design systems live inside saved diagrams. In hosted mode, saved design presets last for the page session; export the design JSON to reuse it elsewhere. Shared organizational preset administration is not included yet. Agent tokens are stored hashed in `agent-tokens.json` at the data-directory root; include that file in backups.
 
 ## Administration, backup, and recovery
 
