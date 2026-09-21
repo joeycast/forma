@@ -45,6 +45,11 @@ import {
   renderSvg,
   serializeDocument,
   inspectScene,
+  alignNodes,
+  distributeNodes,
+  nudgeNodes,
+  type AlignEdge,
+  type DistributeAxis,
   type Patch,
   type Scene,
   type DiagramNode,
@@ -68,7 +73,7 @@ export function App({ account }: { account?: Account }) {
   const [scene, setScene] = useState<Scene | null>(null),
     [busy, setBusy] = useState(true),
     [layoutError, setLayoutError] = useState('');
-  const [selected, setSelected] = useState<string | null>(null),
+  const [selected, setSelected] = useState<string[]>([]),
     [inspectorTab, setInspectorTab] = useState('design');
   const [modal, setModal] = useState(hosted ? 'library' : ''),
     [menu, setMenu] = useState(''),
@@ -140,9 +145,19 @@ export function App({ account }: { account?: Account }) {
     [doc, commit, notify],
   );
   const select = useCallback((id: string | null) => {
-    setSelected(id);
+    setSelected(id ? [id] : []);
     setInspectorTab('design');
   }, []);
+  const selectIds = useCallback((ids: string[]) => setSelected(ids), []);
+  const pinPositions = useCallback(
+    (moves: { id: string; position: { x: number; y: number } }[]) => {
+      if (!moves.length) return;
+      patch({
+        overrides: Object.fromEntries(moves.map((move) => [move.id, { position: move.position }])),
+      });
+    },
+    [patch],
+  );
   const downloadNative = useCallback(() => {
     download(`${slug(docRef.current.title)}.forma.json`, serializeDocument(docRef.current));
     notify('Diagram saved as a native Forma document.');
@@ -168,7 +183,7 @@ export function App({ account }: { account?: Account }) {
           groups: ids.filter((id) => doc.groups.some((g) => g.id === id)),
         },
       });
-      setSelected(null);
+      setSelected([]);
     },
     [doc, patch],
   );
@@ -187,19 +202,41 @@ export function App({ account }: { account?: Account }) {
         event.preventDefault();
         event.shiftKey ? redo() : undo();
       }
-      if (!editing && !modal && selected && (event.key === 'Backspace' || event.key === 'Delete')) {
+      if (
+        !editing &&
+        !modal &&
+        selected.length &&
+        (event.key === 'Backspace' || event.key === 'Delete')
+      ) {
         event.preventDefault();
-        remove([selected]);
+        remove(selected);
+      }
+      if (!editing && !modal && scene && selected.length) {
+        const step = event.shiftKey ? 8 : 1;
+        const delta =
+          event.key === 'ArrowLeft'
+            ? { x: -step, y: 0 }
+            : event.key === 'ArrowRight'
+              ? { x: step, y: 0 }
+              : event.key === 'ArrowUp'
+                ? { x: 0, y: -step }
+                : event.key === 'ArrowDown'
+                  ? { x: 0, y: step }
+                  : null;
+        if (delta) {
+          event.preventDefault();
+          pinPositions(nudgeNodes(scene.nodes, selected, delta));
+        }
       }
       if (event.key === 'Escape') {
         setModal('');
         setMenu('');
-        setSelected(null);
+        setSelected([]);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [save, undo, redo, selected, remove, modal]);
+  }, [save, undo, redo, selected, remove, modal, scene, pinPositions]);
   const uniqueId = (prefix: string) => {
     const ids = new Set([...doc.nodes, ...doc.edges, ...doc.groups].map((n) => n.id));
     let count = 1;
@@ -214,7 +251,7 @@ export function App({ account }: { account?: Account }) {
           id,
           label: `New ${kind}`,
           kind,
-          ...(doc.groups.some((g) => g.id === selected) ? { group: selected } : {}),
+          ...(doc.groups.some((g) => g.id === selected[0]) ? { group: selected[0] } : {}),
         },
       ],
     });
@@ -281,7 +318,7 @@ export function App({ account }: { account?: Account }) {
     return (
       <button
         key={n.id}
-        className={`outline-node ${selected === n.id ? 'selected' : ''} ${indented ? 'indented' : ''}`}
+        className={`outline-node ${selected.includes(n.id) ? 'selected' : ''} ${indented ? 'indented' : ''}`}
         onClick={() => select(n.id)}
       >
         <Icon size={14} />
@@ -295,7 +332,7 @@ export function App({ account }: { account?: Account }) {
       .filter((g) => g.parent === parent)
       .map((g) => (
         <div className="outline-group" style={{ marginLeft: depth ? 10 : 0 }} key={g.id}>
-          <div className={`group-row ${selected === g.id ? 'selected' : ''}`}>
+          <div className={`group-row ${selected.includes(g.id) ? 'selected' : ''}`}>
             <button
               aria-label={`Toggle ${g.label}`}
               onClick={() =>
@@ -497,7 +534,7 @@ export function App({ account }: { account?: Account }) {
                   .filter((e) => matches(e.label || e.id))
                   .map((e) => (
                     <button
-                      className={`outline-node connection-row ${selected === e.id ? 'selected' : ''}`}
+                      className={`outline-node connection-row ${selected.includes(e.id) ? 'selected' : ''}`}
                       key={e.id}
                       onClick={() => select(e.id)}
                     >
@@ -647,13 +684,27 @@ export function App({ account }: { account?: Account }) {
             <Canvas
               scene={scene}
               selected={selected}
-              onSelect={select}
+              onSelect={selectIds}
               onMove={(positions) =>
-                patch({
-                  overrides: Object.fromEntries(
-                    positions.map(({ id, x, y }) => [id, { position: { x, y } }]),
+                pinPositions(positions.map(({ id, x, y }) => ({ id, position: { x, y } })))
+              }
+              onAlign={(edge: AlignEdge) =>
+                pinPositions(
+                  alignNodes(
+                    scene.nodes,
+                    selected.filter((id) => scene.nodes.some((n) => n.id === id)),
+                    edge,
                   ),
-                })
+                )
+              }
+              onDistribute={(axis: DistributeAxis) =>
+                pinPositions(
+                  distributeNodes(
+                    scene.nodes,
+                    selected.filter((id) => scene.nodes.some((n) => n.id === id)),
+                    axis,
+                  ),
+                )
               }
               onConnect={connect}
               onDelete={remove}
@@ -702,7 +753,27 @@ export function App({ account }: { account?: Account }) {
           selected={selected}
           patch={patch}
           onDelete={remove}
-          onSelect={select}
+          onSelect={selectIds}
+          onAlign={(edge: AlignEdge) =>
+            scene &&
+            pinPositions(
+              alignNodes(
+                scene.nodes,
+                selected.filter((id) => scene.nodes.some((n) => n.id === id)),
+                edge,
+              ),
+            )
+          }
+          onDistribute={(axis: DistributeAxis) =>
+            scene &&
+            pinPositions(
+              distributeNodes(
+                scene.nodes,
+                selected.filter((id) => scene.nodes.some((n) => n.id === id)),
+                axis,
+              ),
+            )
+          }
           tab={inspectorTab}
           setTab={setInspectorTab}
           onDesignSystems={() => setModal('systems')}

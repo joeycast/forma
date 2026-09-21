@@ -23,6 +23,8 @@ import {
   type Patch,
   type Scene,
   type Accent,
+  type AlignEdge,
+  type DistributeAxis,
 } from '../../../packages/core/src';
 export function TextField({
   label,
@@ -70,6 +72,8 @@ export function Inspector({
   patch,
   onDelete,
   onSelect,
+  onAlign,
+  onDistribute,
   tab,
   setTab,
   onDesignSystems,
@@ -77,16 +81,20 @@ export function Inspector({
   onDesignSystems: () => void;
   doc: Diagram;
   scene: Scene | null;
-  selected: string | null;
+  selected: string[];
   patch: (p: Patch) => boolean;
   onDelete: (ids: string[]) => void;
-  onSelect: (id: string | null) => void;
+  onSelect: (ids: string[]) => void;
+  onAlign: (edge: AlignEdge) => void;
+  onDistribute: (axis: DistributeAxis) => void;
   tab: string;
   setTab: (tab: string) => void;
 }) {
-  const node = doc.nodes.find((n) => n.id === selected),
-    edge = doc.edges.find((e) => e.id === selected),
-    group = doc.groups.find((g) => g.id === selected);
+  const selectedNodes = doc.nodes.filter((n) => selected.includes(n.id));
+  const node = selectedNodes.length === 1 ? selectedNodes[0] : undefined,
+    edge = selectedNodes.length ? undefined : doc.edges.find((e) => selected.includes(e.id)),
+    group =
+      selectedNodes.length || edge ? undefined : doc.groups.find((g) => selected.includes(g.id));
   const inspection = scene ? inspectScene(scene) : null;
   const pins = Object.values(doc.presentation.nodes).filter((n) => n.position).length;
   return (
@@ -143,7 +151,7 @@ export function Inspector({
                 key={i}
                 className="issue"
                 onClick={() => {
-                  onSelect(issue.ids[0]);
+                  onSelect(issue.ids);
                 }}
               >
                 <AlertTriangle size={15} />
@@ -157,7 +165,8 @@ export function Inspector({
               <h3>What we check</h3>
               <p className="help-text">
                 Overlaps, connector collisions and crossings, clipping, label placement, spacing,
-                density, and near alignment.
+                density, and near-miss row or column alignment. Use Align or{' '}
+                <code>forma align --fix</code> to snap them.
               </p>
               <p className="help-text">
                 Geometric checks are a helpful second pair of eyes. Your judgment is still part of
@@ -167,7 +176,57 @@ export function Inspector({
           </>
         ) : (
           <>
-            {node ? (
+            {selectedNodes.length > 1 ? (
+              <section>
+                <div className="section-heading">
+                  <h3>Selection</h3>
+                  <code>{selectedNodes.length}</code>
+                </div>
+                <p className="help-text">
+                  Align edges to the selection bounds. Distribute keeps the outer components fixed
+                  and evens the gaps. Alignment pins positions so later agent edits preserve them.
+                </p>
+                <div className="align-actions">
+                  {(
+                    [
+                      ['left', 'Left'],
+                      ['center', 'Centers'],
+                      ['right', 'Right'],
+                      ['top', 'Top'],
+                      ['middle', 'Middles'],
+                      ['bottom', 'Bottom'],
+                    ] as const
+                  ).map(([edge, label]) => (
+                    <button key={edge} className="secondary" onClick={() => onAlign(edge)}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="align-actions">
+                  <button
+                    className="secondary"
+                    disabled={selectedNodes.length < 3}
+                    onClick={() => onDistribute('horizontal')}
+                  >
+                    Distribute horizontally
+                  </button>
+                  <button
+                    className="secondary"
+                    disabled={selectedNodes.length < 3}
+                    onClick={() => onDistribute('vertical')}
+                  >
+                    Distribute vertically
+                  </button>
+                </div>
+                <button
+                  className="danger-button"
+                  onClick={() => onDelete(selectedNodes.map((n) => n.id))}
+                >
+                  <Trash2 size={14} />
+                  Delete components
+                </button>
+              </section>
+            ) : node ? (
               <section>
                 <div className="section-heading">
                   <h3>Component</h3>
@@ -500,11 +559,12 @@ export function Inspector({
                 </button>
               )}
             </section>
-            {!selected && (
+            {!selected.length && (
               <section className="inspector-tip">
                 <MouseTip />
                 <p>
-                  Select a component to edit its details, or drag it to make the layout your own.
+                  Select a component to edit its details, or drag a marquee to align several at
+                  once.
                 </p>
               </section>
             )}

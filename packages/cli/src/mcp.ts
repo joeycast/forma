@@ -7,7 +7,7 @@ import type { AgentService } from './agent-access';
 import { parseDocument, layoutDiagram, inspectScene, renderSvg } from '../../core/src/index';
 
 export function createMcpAdapter(service: Pick<AgentService, 'list' | 'read' | 'write'>) {
-  const server = new McpServer({ name: 'forma', version: '0.4.1' });
+  const server = new McpServer({ name: 'forma', version: '0.4.2' });
   const result = async (action: () => Promise<unknown>) => {
     try {
       const value = await action();

@@ -71,3 +71,37 @@ test('CLI artifact → human pin → agent patch → SVG and PNG export', async 
     await rm(dir, { recursive: true, force: true });
   }
 });
+test('CLI align pins a shared edge', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'forma-align-'));
+  try {
+    const file = join(dir, 'diagram.forma.json');
+    await writeFile(
+      file,
+      JSON.stringify({
+        version: 2,
+        title: 'Align',
+        nodes: [
+          { id: 'a', label: 'A' },
+          { id: 'b', label: 'B' },
+        ],
+        edges: [],
+        presentation: {
+          nodes: {
+            a: { position: { x: 40, y: 10 } },
+            b: { position: { x: 48, y: 120 } },
+          },
+        },
+      }),
+    );
+    const result = cli('align', file, '--left', '--ids', 'a,b');
+    assert.equal(result.status, 0, result.stderr);
+    const artifact = JSON.parse(await readFile(file, 'utf8'));
+    assert.equal(
+      artifact.presentation.nodes.a.position.x,
+      artifact.presentation.nodes.b.position.x,
+    );
+    assert.equal(cli('align', file, '--fix').status, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

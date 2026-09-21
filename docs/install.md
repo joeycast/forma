@@ -3,7 +3,7 @@
 Requires Node.js 22+ and npm. Start with the released package:
 
 ```sh
-npm install -g https://github.com/joeycast/forma/releases/download/v0.4.1/forma-diagrams-0.4.1.tgz
+npm install -g https://github.com/joeycast/forma/releases/download/v0.4.2/forma-diagrams-0.4.2.tgz
 forma serve --directory ~/Forma
 ```
 

@@ -15,6 +15,13 @@ import {
   layoutDiagram,
   inspectScene,
   renderSvg,
+  alignEdges,
+  alignNodes,
+  distributeAxes,
+  distributeNodes,
+  mergeAlignmentPins,
+  type AlignEdge,
+  type DistributeAxis,
 } from '../../core/src/index';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -114,10 +121,84 @@ async function main() {
       process.once(signal, () => server.close(() => process.exit(0)));
     return;
   }
+  if (command === 'align') {
+    const file = args.shift();
+    if (!file) {
+      throw new Error(
+        'Usage: forma align FILE --left|--center|--right|--top|--middle|--bottom --ids a,b | --distribute horizontal|vertical --ids a,b,c | --fix',
+      );
+    }
+    let edge: AlignEdge | undefined,
+      axis: DistributeAxis | undefined,
+      ids: string[] | undefined,
+      fix = false,
+      outputPath: string | undefined;
+    while (args.length) {
+      const arg = args.shift()!;
+      if (arg === '--fix') {
+        fix = true;
+        continue;
+      }
+      if ((alignEdges as readonly string[]).includes(arg.slice(2)) && arg.startsWith('--')) {
+        edge = arg.slice(2) as AlignEdge;
+        continue;
+      }
+      if (arg === '--distribute' && args[0]) {
+        const value = args.shift()!;
+        if (!(distributeAxes as readonly string[]).includes(value))
+          throw new Error('Distribute along horizontal or vertical.');
+        axis = value as DistributeAxis;
+        continue;
+      }
+      if (arg === '--ids' && args[0]) {
+        ids = args
+          .shift()!
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean);
+        continue;
+      }
+      if (arg === '--output' && args[0]) {
+        outputPath = args.shift();
+        continue;
+      }
+      throw new Error(`Unknown option: ${arg}`);
+    }
+    const chosen = [fix, !!edge, !!axis].filter(Boolean).length;
+    if (chosen !== 1)
+      throw new Error('Choose one of --fix, an alignment edge, or --distribute AXIS.');
+    const original = parseDocument(await json(file));
+    const scene = await layoutDiagram(original);
+    const moves = fix
+      ? mergeAlignmentPins(
+          scene.nodes,
+          inspectScene(scene)
+            .issues.filter((issue) => issue.code === 'near-alignment' && issue.fix)
+            .map((issue) => ({ ids: issue.ids, edge: issue.fix!.edge })),
+        )
+      : axis
+        ? distributeNodes(scene.nodes, ids ?? [], axis)
+        : alignNodes(scene.nodes, ids ?? [], edge!);
+    const merged = new Map(moves.map((move) => [move.id, move.position]));
+    const updated = patchDocument(original, {
+      overrides: Object.fromEntries([...merged].map(([id, position]) => [id, { position }])),
+    });
+    await atomic(outputPath ?? file, serializeDocument(updated));
+    output({
+      ok: true,
+      command,
+      output: resolve(outputPath ?? file),
+      pinned: [...merged.keys()],
+      remaining: inspectScene(await layoutDiagram(updated)).issues.filter(
+        (issue) => issue.code === 'near-alignment',
+      ).length,
+    });
+    return;
+  }
   if (!command || command === '--help' || command === 'help') {
     output({
       name: 'forma',
-      version: '0.4.1',
+      version: '0.4.2',
       usage: [
         'forma serve [--directory ~/Forma] [--port 4242]',
         'forma host (configured with FORMA_* environment variables)',
@@ -132,6 +213,9 @@ async function main() {
         'forma render diagram.forma.json --output diagram.svg|diagram.png',
         'forma export diagram.forma.json --output diagram.svg|diagram.png',
         'forma inspect diagram.forma.json [--strict]',
+        'forma align diagram.forma.json --left|--center|--right|--top|--middle|--bottom --ids a,b',
+        'forma align diagram.forma.json --distribute horizontal|vertical --ids a,b,c',
+        'forma align diagram.forma.json --fix',
       ],
       exitCodes: {
         '0': 'success',

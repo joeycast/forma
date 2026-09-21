@@ -13,7 +13,7 @@ Write a version 2 native document with stable node/edge/group IDs, short labels,
 
 Prefer semantic relationships and automatic layout. Use a composition grid when relative rows and columns carry meaning. Use human position overrides for deliberate exceptions. Adopt an organizational identity with `style diagram.forma.json --system examples/design-systems/atelier.json`; per-element styles remain intact.
 
-Run `validate`, `inspect`, and `render --output diagram.png` on the artifact. **View the actual render** and refine its hierarchy, spacing, routing, and readability. Zero diagnostic warnings is useful evidence, not proof of good design. Deliver the native file and export together.
+Run `validate`, `inspect`, and `render --output diagram.png` on the artifact. If inspect reports `near-alignment`, run `forma align diagram.forma.json --fix`, or align specific nodes with `--left|--center|--right|--top|--middle|--bottom --ids a,b`. Use `--distribute horizontal|vertical --ids a,b,c` to even gaps. Alignment writes pins; preserve them. **View the actual render** and refine its hierarchy, spacing, routing, and readability. Zero diagnostic warnings is useful evidence, not proof of good design. Deliver the native file and export together.
 
 For edits, reload the human's latest saved file and use `patch --patch changes.json`. Preserve IDs and presentation overrides. Never reconstruct a diagram merely to add a node or change a label. `layout --output scene.json` is derived geometry, never the source artifact. CLI exit 1 means invalid input/execution; inspect exits 2 for errors (also warnings with `--strict`).
 

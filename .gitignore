@@ -9,3 +9,4 @@ public/licenses/FORMA_LICENSE.txt
 .env.*
 !.env.example
 deploy/.env
+.vercel

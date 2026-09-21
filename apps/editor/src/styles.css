@@ -663,6 +663,49 @@ p {
   transform: translateX(-50%);
   gap: 3px;
 }
+.align-bar {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  z-index: 5;
+  border: 1px solid #e0e4ec;
+  background: #fff;
+  border-radius: 8px;
+  padding: 5px;
+  box-shadow: 0 3px 12px #25304c07;
+}
+.align-bar > button {
+  width: 32px;
+  height: 30px;
+  border-radius: 5px;
+  color: #5c6573;
+}
+.align-bar > button:hover:not(:disabled) {
+  background: #f4f1fb;
+  color: #8069bb;
+}
+.align-bar > button:disabled {
+  opacity: 0.35;
+}
+.align-bar > span {
+  height: 19px;
+  width: 1px;
+  background: #e9ecf0;
+  margin: 0 4px;
+}
+.align-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+.align-actions .secondary {
+  padding: 6px 9px;
+}
 .canvas-tools > button {
   width: 34px;
   height: 32px;

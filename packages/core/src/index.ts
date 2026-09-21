@@ -2,6 +2,7 @@ export * from './document';
 export * from './scene';
 export * from './layout';
 export * from './inspect';
+export * from './align';
 export * from './render';
 export * from './theme';
 export * from './geometry';

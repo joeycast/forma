@@ -24,7 +24,7 @@ const nativeJSON = serializeDocument(updated);
 
 `parseDocument(unknown)` validates and applies defaults, returning a `Diagram`. `patchDocument(diagram, unknown)` returns a validated new document without mutating the input. `serializeDocument(diagram)` returns stable, indented JSON with a trailing newline.
 
-`layoutDiagram(diagram)` asynchronously returns a `Scene`. Layout is implemented using ELK and a composition layer. `inspectScene(scene)` returns machine-readable `issues` with `code`, `severity`, `message`, and affected `ids`, plus a `summary` with error and warning counts. Inspect after human positioning as well as semantic changes.
+`layoutDiagram(diagram)` asynchronously returns a `Scene`. Layout is implemented using ELK and a composition layer. `inspectScene(scene)` returns machine-readable `issues` with `code`, `severity`, `message`, and affected `ids`, plus a `summary` with error and warning counts. Pinned nodes that sit within 8px of a shared row or column produce `near-alignment` warnings with a `fix` edge and target. `alignNodes`, `distributeNodes`, and `mergeAlignmentPins` produce position pins for `patchDocument`. Inspect after human positioning as well as semantic changes.
 
 `renderSvg(scene, { fontDataUri?, boldFontDataUri? })` returns SVG text. Supply regular and semibold font data URIs for a portable, embedded-font SVG. The CLI embeds the bundled static IBM Plex Sans Regular and SemiBold fonts and registers both with resvg to generate PNG at 2× scale. PNG output above 32 million pixels is rejected before rasterization; use SVG or reduce diagram spread and pinned positions for larger diagrams.
 

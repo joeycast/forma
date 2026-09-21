@@ -24,7 +24,7 @@ No diagram type is required. `type` is optional descriptive metadata, not a layo
 
 Use `layout.mode: grid` when relative placement expresses meaning. Each node can have `placement: {column: 0, row: 1}`. Occupied columns and rows size to their widest/tallest member, with system spacing between them. Indices establish order, not physical units; unused indices do not reserve empty tracks. Each cell holds one node. Omitted placements use the node's array index as column and row zero. Groups fit their descendants after placement. This supports comparisons, parallel streams, phase sequences, and custom explanations without adding categories.
 
-`presentation.nodes[id].position: {x,y}` is an absolute human pin in scene coordinates. Pins override automatic/grid positions. Adding content around pins can conflict; inspect after editing. Clearing just a position returns that node to engine control without erasing its style.
+`presentation.nodes[id].position: {x,y}` is an absolute human pin in scene coordinates. Pins override automatic/grid positions. Adding content around pins can conflict; inspect after editing. Clearing just a position returns that node to engine control without erasing its style. The editor and `forma align` write pins when you align or distribute components. Arrow keys nudge selected components (Shift for 8px).
 
 ## Design systems
 

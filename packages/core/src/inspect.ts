@@ -2,12 +2,14 @@ import type { Point } from './document';
 import type { Scene, Box, SceneNode } from './scene';
 import { overlaps, segmentCross, segmentHitsBox, shapeBoundary } from './geometry';
 import { textWidth } from './text';
+import { selectedAlignmentClusters, type AlignEdge } from './align';
 export interface VisualIssue {
   code: string;
   severity: 'error' | 'warning';
   message: string;
   ids: string[];
   location?: { x: number; y: number };
+  fix?: { edge: AlignEdge; target: number };
 }
 export function inspectScene(scene: Scene) {
   const issues: VisualIssue[] = [];
@@ -30,18 +32,19 @@ export function inspectScene(scene: Scene) {
           a.id,
           b.id,
         ]);
-      if (
-        a.semantic.group === b.semantic.group &&
-        Math.abs(a.y - b.y) > 1 &&
-        Math.abs(a.y - b.y) < 6
-      )
-        add(
-          'near-alignment',
-          'warning',
-          'Top edges are almost aligned; snap them to a common position.',
-          [a.id, b.id],
-        );
     }
+  for (const cluster of selectedAlignmentClusters(nodes)) {
+    const labels = cluster.ids
+      .map((id) => nodes.find((n) => n.id === id)?.semantic.label ?? id)
+      .join(', ');
+    issues.push({
+      code: 'near-alignment',
+      severity: 'warning',
+      message: `${cluster.edge} edges of ${labels} are ${cluster.delta}px apart. Snap them to a shared ${cluster.edge} edge.`,
+      ids: cluster.ids,
+      fix: { edge: cluster.edge, target: cluster.target },
+    });
+  }
   for (const n of nodes) {
     if (n.style?.fontFamily && n.style.fontFamily !== 'IBM Plex Sans')
       add(

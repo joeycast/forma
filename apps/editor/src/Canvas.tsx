@@ -14,7 +14,23 @@ import {
   type NodeChange,
   type Edge,
 } from '@xyflow/react';
-import { MousePointer2, Hand, Plus, Minus, Maximize, Scan } from 'lucide-react';
+import {
+  MousePointer2,
+  Hand,
+  Plus,
+  Minus,
+  Maximize,
+  Scan,
+  AlignStartVertical,
+  AlignCenterVertical,
+  AlignEndVertical,
+  AlignStartHorizontal,
+  AlignCenterHorizontal,
+  AlignEndHorizontal,
+  AlignHorizontalSpaceAround,
+  AlignVerticalSpaceAround,
+} from 'lucide-react';
+import type { AlignEdge, DistributeAxis } from '../../../packages/core/src';
 import {
   nodeMarkup,
   groupMarkup,
@@ -78,6 +94,8 @@ export function Canvas({
   selected,
   onSelect,
   onMove,
+  onAlign,
+  onDistribute,
   onConnect,
   onDelete,
   fitKey,
@@ -85,9 +103,11 @@ export function Canvas({
   onAdd,
 }: {
   scene: Scene;
-  selected: string | null;
-  onSelect: (id: string | null) => void;
+  selected: string[];
+  onSelect: (ids: string[]) => void;
   onMove: (positions: { id: string; x: number; y: number }[]) => void;
+  onAlign: (edge: AlignEdge) => void;
+  onDistribute: (axis: DistributeAxis) => void;
   onConnect: (c: Connection) => void;
   onDelete: (ids: string[]) => void;
   fitKey: number;
@@ -143,7 +163,7 @@ export function Canvas({
         type: 'diagram',
         position: { x: n.x, y: n.y },
         data: { node: n, theme, down: scene.document.layout.direction === 'DOWN' },
-        selected: selected === n.id,
+        selected: selected.includes(n.id),
         ariaLabel: n.semantic.label,
       })),
     ]);
@@ -174,7 +194,7 @@ export function Canvas({
       source: e.semantic.source,
       target: e.semantic.target,
       type: 'diagram',
-      selected: selected === e.id,
+      selected: selected.includes(e.id),
       data: { edge, theme: scene.document.presentation.theme },
     };
   });
@@ -209,9 +229,16 @@ export function Canvas({
           );
           if (completed.length) onMove(completed);
         }}
-        onNodeClick={(_, n) => onSelect(n.id)}
-        onEdgeClick={(_, e) => onSelect(e.id)}
-        onPaneClick={() => onSelect(null)}
+        onSelectionChange={({ nodes, edges }) => {
+          const ids = [
+            ...nodes.filter((n) => n.type === 'diagram').map((n) => n.id),
+            ...edges.map((e) => e.id),
+          ];
+          if (!ids.length) return;
+          if (ids.length === selected.length && ids.every((id) => selected.includes(id))) return;
+          onSelect(ids);
+        }}
+        onPaneClick={() => onSelect([])}
         onNodeDragStart={() => setDragging(true)}
         onNodeDragStop={() => setDragging(false)}
         onConnect={onConnect}
@@ -219,7 +246,7 @@ export function Canvas({
         onEdgesDelete={(es) => onDelete(es.map((e) => e.id))}
         deleteKeyCode={null}
         onMove={(_, viewport) => setZoom(Math.round(viewport.zoom * 100))}
-        snapToGrid
+        snapToGrid={grid}
         snapGrid={[8, 8]}
         panOnDrag={pan ? true : [1, 2]}
         selectionOnDrag={!pan}
@@ -227,8 +254,43 @@ export function Canvas({
         selectionKeyCode="Shift"
         proOptions={{ hideAttribution: false }}
       >
-        {grid && <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#cbd1dc" />}
+        {grid && <Background variant={BackgroundVariant.Dots} gap={8} size={1} color="#cbd1dc" />}
       </ReactFlow>
+      {selected.filter((id) => scene.nodes.some((n) => n.id === id)).length > 1 && (
+        <div className="align-bar" role="toolbar" aria-label="Align selected components">
+          {(
+            [
+              ['left', AlignStartVertical, 'Align left'],
+              ['center', AlignCenterVertical, 'Align centers'],
+              ['right', AlignEndVertical, 'Align right'],
+              ['top', AlignStartHorizontal, 'Align top'],
+              ['middle', AlignCenterHorizontal, 'Align middles'],
+              ['bottom', AlignEndHorizontal, 'Align bottom'],
+            ] as const
+          ).map(([edge, Icon, label]) => (
+            <button key={edge} aria-label={label} title={label} onClick={() => onAlign(edge)}>
+              <Icon size={16} />
+            </button>
+          ))}
+          <span />
+          <button
+            aria-label="Distribute horizontally"
+            title="Distribute horizontally"
+            disabled={selected.filter((id) => scene.nodes.some((n) => n.id === id)).length < 3}
+            onClick={() => onDistribute('horizontal')}
+          >
+            <AlignHorizontalSpaceAround size={16} />
+          </button>
+          <button
+            aria-label="Distribute vertically"
+            title="Distribute vertically"
+            disabled={selected.filter((id) => scene.nodes.some((n) => n.id === id)).length < 3}
+            onClick={() => onDistribute('vertical')}
+          >
+            <AlignVerticalSpaceAround size={16} />
+          </button>
+        </div>
+      )}
       <div className="canvas-tools">
         <button
           className={!pan ? 'active' : ''}
