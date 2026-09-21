@@ -4,7 +4,7 @@ Verified during the 0.4.0 implementation on 2026-09-21.
 
 ## Automated checks
 
-`npm run check` runs the existing engine/CLI/local-library coverage and new hosted coverage. The hosted tests exercise:
+`npm run check` passes all 25 tests, TypeScript, and the production build. Formatting and schema-regeneration checks also pass. The suite runs the existing engine/CLI/local-library coverage and new hosted coverage. The hosted tests exercise:
 
 - Google authorization URL identity scopes, callback, S256 challenge, state, and nonce.
 - Browser-bound, single-use, expiring login attempts; provider failures and nonce mismatches fail closed.
@@ -26,6 +26,6 @@ The sign-in page and hosted UI were inspected visually. Hosted mode uses server 
 
 ## Deployment boundary
 
-A Docker build/start/restart/unauthenticated-API check is included in GitHub CI. Docker is not installed on the development Mac, so local Node tests and isolated npm installs provide the local runtime verification.
+The Docker build/start/restart/unauthenticated-API check passed in GitHub CI, alongside the Linux test/build checks. The npm release tarball was installed to an isolated prefix outside the repository; its hosted server served the editor and rejected unauthenticated library access, and its local CLI rendered a diagram with zero inspection errors/warnings. Compose and Caddy configuration validation are also included in CI. Docker is not installed on the development Mac, so local Node tests and isolated npm installs provide the local runtime verification.
 
 A live deployment still needs the operator's Google Web OAuth client, consent configuration, allowlist, domain, TLS, and durable disk. No such credentials or host were supplied in this phase; live Google sign-in and public TLS issuance are not claimed as verified. The supplied Compose/Caddy configuration and [operator guide](self-hosting.md) document the steps.

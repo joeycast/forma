@@ -19,6 +19,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate hosting configuration
+        run: |
+          cp deploy/.env.example deploy/.env
+          docker compose --env-file deploy/.env -f deploy/compose.yml config --quiet
+          docker run --rm -e FORMA_PUBLIC_URL=https://forma.test -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile
       - run: docker build -t forma:test .
       - name: Verify packaged hosted server
         run: |
