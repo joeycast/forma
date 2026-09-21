@@ -45,6 +45,12 @@ npm run build
 node packages/cli/bin.mjs serve --directory ~/Forma
 ```
 
-Install a newer version's release tarball to update. The diagrams directory is separate from the application and is not replaced during an update. The release includes an SHA-256 checksum file. npm registry publication and Homebrew are not available yet; do not use similarly named packages as substitutes.
+Install a newer version's release tarball to update:
+
+```sh
+npm install -g https://github.com/joeycast/forma/releases/download/v0.4.2/forma-diagrams-0.4.2.tgz
+```
+
+The diagrams directory is separate from the application and is not replaced during an update. The release includes an SHA-256 checksum file. The npm registry package and Homebrew formula are not published yet; do not install similarly named packages as substitutes. Hosted instances (Node, Docker, Vercel) follow [Updating a hosted instance](self-hosting.md#updating-a-hosted-instance).
 
 Static hosting of `dist/` remains supported. Google sign-in, private server-side user libraries, and optional agent tokens are available through the separate authenticated `forma host` mode; see [self-hosting](self-hosting.md). The local `serve` command only binds to loopback and must not be reverse-proxied onto the internet.

@@ -23,7 +23,7 @@ Open the printed URL. **Library** browses your folder and subfolders; **Save** w
 
 ## Host for your organization
 
-Forma also supports Google sign-in and private server-backed libraries. Your organization supplies its own Google OAuth client, server, and durable disk. The authenticated `forma host` command is separate from the local `forma serve` adapter. A Docker Compose/Caddy recipe provides HTTPS hosting without a database or Forma-operated service. Signed-in users can issue scoped agent tokens from **Agent access** and connect `forma remote` or `forma mcp` without sharing Google credentials. See the [self-hosting guide](docs/self-hosting.md) for setup, admission allowlists, backups, agent tokens, and limits.
+Forma also supports Google sign-in and private server-backed libraries. Your organization supplies its own Google OAuth client, server, and durable disk. The authenticated `forma host` command is separate from the local `forma serve` adapter. A Docker Compose/Caddy recipe provides HTTPS hosting without a database or Forma-operated service. Signed-in users can issue scoped agent tokens from **Agent access** and connect `forma remote` or `forma mcp` without sharing Google credentials. See the [self-hosting guide](docs/self-hosting.md) for setup, admission allowlists, backups, agent tokens, [updates](docs/self-hosting.md#updating-a-hosted-instance), and limits.
 
 ## Develop locally
 

@@ -87,6 +87,54 @@ https://YOUR-DEPLOYMENT.vercel.app/auth/callback
 
 3. Redeploy. Visit the production origin, sign in with an allowed Google account, and save a diagram in Library. Agent tokens from **Agent access** still work with `FORMA_REMOTE_URL` set to that origin.
 
+## Updating a hosted instance
+
+The application and the diagram store are separate. An update replaces Forma. It does not replace libraries, Blob objects, Docker volumes, or `FORMA_DATA_DIR` unless you delete those yourself.
+
+Check the latest GitHub [release](https://github.com/joeycast/forma/releases) and its notes before you move. Read the notes for env-var or OAuth-redirect changes. Google client secrets, allowlists, and session/Blob tokens stay on the host; they are not in the public repository.
+
+### Node (`forma host`)
+
+Installations today use the GitHub release tarball, which npm already understands:
+
+```sh
+npm install -g https://github.com/joeycast/forma/releases/download/v0.4.2/forma-diagrams-0.4.2.tgz
+```
+
+Restart the `forma host` process (or its supervisor). Leave `FORMA_DATA_DIR` pointed at the same disk. Verify `/healthz`, then sign in and open a known diagram.
+
+The npm registry name `forma-diagrams` is reserved in documentation for a future `npm install -g forma-diagrams` / `npm update -g forma-diagrams` flow. Until a registry package is published, do not install similarly named packages. Source checkouts update with `git fetch` and a checkout of the release tag, then `npm ci && npm run build`, then restart.
+
+### Docker Compose
+
+Keep the named volumes. Rebuild and recreate the app container from the tag you want:
+
+```sh
+git fetch
+git checkout v0.4.2
+docker compose --env-file deploy/.env -f deploy/compose.yml up -d --build
+```
+
+Do not pass `--volumes` to `docker compose down` unless you intend to delete diagrams and TLS state.
+
+### Vercel
+
+A Vercel project runs a specific deployment of this repository. Env vars and Blob data survive deploys.
+
+If Production is **not** connected to GitHub (CLI deploys only), update by deploying the tree you want:
+
+```sh
+git fetch
+git checkout v0.4.2
+vercel --prod --yes
+```
+
+If you connect GitHub, every push to the linked branch deploys that branch to the project. That is convenient and also means `main` commits go live on your login host. Prefer Production deploys from **release tags** when the project is your own workspace.
+
+After changing Vercel env vars (allowlist, OAuth, session secret), trigger a new deployment so the functions load the new values.
+
+npm does not update a Vercel site. Registry packages help CLI and `forma host` operators; Vercel still needs a git or CLI deploy of the app.
+
 ## Daily use and agents
 
 After sign-in, Library opens to your private files. Create diagrams, organize them with relative paths such as `engineering/platform.forma.json`, and save explicitly. Reloading opens Library rather than restoring a private draft from browser storage. Unsaved hosted edits do not survive a page reload or sign-out; use Save or export a native copy first. Sign-out also closes authenticated views in other tabs.
@@ -114,7 +162,7 @@ Back up the entire data directory/volume, preserving ownership and permissions. 
 
 A clean shutdown removes `.forma-host.lock`. After an unclean shutdown the lock may remain. Confirm that every Forma process using that directory is stopped before removing that one lock file; never remove a live process's lock. Named Docker volumes can be inspected or mounted in a maintenance container by an administrator. Do not remove the users directory to clear a lock.
 
-Changing allowlists requires restart and signs everyone out. Domain access permits all users whose verified Google `hd` matches; use explicit emails instead when selective access is required. Existing files remain on disk when admission is removed. Sessions expire after 12 hours and all sessions are revoked on restart. Google account changes are checked on the next sign-in; immediate offboarding requires updating admission and restarting. Add internet-edge rate limiting/monitoring appropriate to your host; the application bounds sessions, login attempts, users, document sizes, and per-user storage, but is not a general denial-of-service protection service.
+Admission is `FORMA_ALLOWED_EMAILS` and/or `FORMA_ALLOWED_DOMAINS`. Domain access permits all users whose verified Google `hd` matches; use explicit emails when selective access is required. Existing files remain when admission is removed. On Node/`forma host`, changing the allowlist requires a process restart and in-memory sessions are cleared. On Vercel, change the env vars and redeploy; admission is re-checked on each API request. Sessions expire after 12 hours. Google account changes are checked on the next sign-in. Immediate offboarding is: update the allowlist, then restart or redeploy. Add internet-edge rate limiting/monitoring appropriate to your host; the application bounds sessions, login attempts, users, document sizes, and per-user storage, but is not a general denial-of-service protection service.
 
 ## Verification boundary
 
