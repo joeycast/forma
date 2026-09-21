@@ -1,3 +1,4 @@
+import { hosted } from './hosting';
 import { useState } from 'react';
 import {
   atelier,
@@ -8,7 +9,9 @@ import {
 } from '../../../packages/core/src';
 import { download, slug } from './storage';
 const KEY = 'forma.design-systems.v1';
+let hostedDesigns: DesignSystem[] = [];
 function readSaved(): DesignSystem[] {
+  if (hosted) return hostedDesigns;
   try {
     return JSON.parse(localStorage.getItem(KEY) ?? '[]').map((v: unknown) =>
       designSystemSchema.parse(v),
@@ -223,7 +226,8 @@ export function DesignSystems({ doc, apply }: { doc: Diagram; apply: (doc: Diagr
           onClick={() =>
             action((value) => {
               const next = [...readSaved().filter((s) => s.id !== value.id), value];
-              localStorage.setItem(KEY, JSON.stringify(next));
+              if (hosted) hostedDesigns = next;
+              else localStorage.setItem(KEY, JSON.stringify(next));
               setSaved(next);
               apply(patchDocument(doc, { designSystem: value }));
             })
@@ -233,8 +237,10 @@ export function DesignSystems({ doc, apply }: { doc: Diagram; apply: (doc: Diagr
         </button>
       </div>
       <p className="help-text">
-        Saved designs stay in this browser. Export the JSON to share it or keep it in Git.
-        Individual element overrides still win.
+        {hosted
+          ? 'Design presets stay in this session. Save the diagram to retain its identity on the server.'
+          : 'Saved designs stay in this browser.'}{' '}
+        Export the JSON to share it or keep it in Git. Individual element overrides still win.
       </p>
       {message && (
         <p className="form-error" role="alert">

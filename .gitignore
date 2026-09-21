@@ -5,3 +5,7 @@ output/
 *.tmp
 public/licenses/THIRD_PARTY_LICENSES.txt
 public/licenses/FORMA_LICENSE.txt
+.env
+.env.*
+!.env.example
+deploy/.env

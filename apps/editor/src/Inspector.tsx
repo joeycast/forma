@@ -513,7 +513,7 @@ export function Inspector({
       </div>
       <div className="inspector-footer">
         <span className="tiny-dot" />
-        All processing happens on your device
+        Layout and rendering happen on your device
       </div>
     </aside>
   );

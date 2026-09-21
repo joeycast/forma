@@ -1,0 +1,38 @@
+services:
+  forma:
+    build:
+      context: ..
+    init: true
+    stop_grace_period: 45s
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      FORMA_DATA_DIR: /data
+      FORMA_BIND_HOST: 0.0.0.0
+      FORMA_PORT: 4242
+    volumes:
+      - forma-data:/data
+    expose:
+      - '4242'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      FORMA_PUBLIC_URL: ${FORMA_PUBLIC_URL:?Set FORMA_PUBLIC_URL in .env}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - forma
+volumes:
+  forma-data:
+  caddy-data:
+  caddy-config:

@@ -1,3 +1,4 @@
+import { hosted } from './hosting';
 import regularFont from '../../../public/fonts/IBMPlexSans-Regular.ttf?inline';
 import boldFont from '../../../public/fonts/IBMPlexSans-SemiBold.ttf?inline';
 import { useCallback, useEffect, useState } from 'react';
@@ -25,7 +26,7 @@ const KEY = 'forma.document.v1';
 export function useDocument() {
   const [initial] = useState(() => {
     try {
-      const saved = localStorage.getItem(KEY);
+      const saved = hosted ? null : localStorage.getItem(KEY);
       if (saved) return parseDocument(JSON.parse(saved));
     } catch {
       /* Preserve unusable storage until next deliberate edit. */
@@ -40,7 +41,7 @@ export function useDocument() {
   });
   const [saved, setSaved] = useState(true);
   useEffect(() => {
-    if (history.revision === 0) return;
+    if (history.revision === 0 || hosted) return;
     try {
       localStorage.setItem(KEY, serializeDocument(history.current));
       setSaved(true);

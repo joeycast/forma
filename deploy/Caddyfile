@@ -1,0 +1,4 @@
+{$FORMA_PUBLIC_URL} {
+    encode zstd gzip
+    reverse_proxy forma:4242
+}

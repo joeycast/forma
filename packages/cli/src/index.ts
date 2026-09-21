@@ -48,6 +48,43 @@ async function atomic(path: string, data: string | Uint8Array) {
 async function main() {
   const args = process.argv.slice(2);
   const command = args.shift();
+  if (command === 'host') {
+    if (args.length)
+      throw new Error(
+        'forma host reads configuration from FORMA_* environment variables. See docs/self-hosting.md.',
+      );
+    const { createHostedServer } = await import('./hosted');
+    const required = (key: string) => {
+      const value = process.env[key];
+      if (!value) throw new Error(`Set ${key}. See docs/self-hosting.md.`);
+      return value;
+    };
+    const port = Number(process.env.FORMA_PORT ?? 4242);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid FORMA_PORT');
+    const split = (key: string) =>
+      (process.env[key] ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    const url = required('FORMA_PUBLIC_URL');
+    const server = await createHostedServer({
+      directory: required('FORMA_DATA_DIR'),
+      assets: join(root, 'dist'),
+      publicUrl: url,
+      clientId: required('FORMA_GOOGLE_CLIENT_ID'),
+      clientSecret: required('FORMA_GOOGLE_CLIENT_SECRET'),
+      allowedEmails: split('FORMA_ALLOWED_EMAILS'),
+      allowedDomains: split('FORMA_ALLOWED_DOMAINS'),
+      host: process.env.FORMA_BIND_HOST ?? '127.0.0.1',
+      port,
+      maxBytes: Number(process.env.FORMA_USER_BYTES ?? 100_000_000),
+      maxFiles: Number(process.env.FORMA_USER_FILES ?? 1000),
+      maxUsers: Number(process.env.FORMA_MAX_USERS ?? 500),
+    });
+    output({ ok: true, command, url });
+    for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => server.close());
+    return;
+  }
   if (command === 'serve') {
     const options: Record<string, string> = {};
     for (let i = 0; i < args.length; i += 2) {
@@ -67,9 +104,10 @@ async function main() {
   if (!command || command === '--help' || command === 'help') {
     output({
       name: 'forma',
-      version: '0.3.0',
+      version: '0.4.0',
       usage: [
         'forma serve [--directory ~/Forma] [--port 4242]',
+        'forma host (configured with FORMA_* environment variables)',
         'forma create [--template architecture|flow|blank] --output diagram.forma.json',
         'forma migrate diagram.forma.json [--output upgraded.forma.json]',
         'forma style diagram.forma.json --system brand.json [--output styled.forma.json]',

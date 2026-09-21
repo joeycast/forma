@@ -1,19 +1,24 @@
+import { hosted } from './hosting';
 import { useCallback, useEffect, useState } from 'react';
 import { parseDocument, serializeDocument, type Diagram } from '../../../packages/core/src';
 import { slug } from './storage';
 type Item = { path: string; title: string; modified: string; error?: string };
 type Library = {
-  mode: 'local' | 'browser';
+  mode: 'local' | 'browser' | 'hosted';
   directory: string;
   workspace: string;
   items: Item[];
   folders: string[];
+  owner?: string;
+  bytes?: number;
+  quota?: { bytes: number; files: number };
 };
 export type OpenFile = { path: string; revision: string; workspace: string };
 type Entry = { document: Diagram; revision: string; modified: string };
 const KEY = 'forma.library.v1';
 const ACTIVE = 'forma.library.active.v1';
 function previousSession(): { active: OpenFile | null; savedDocument: string } {
+  if (hosted) return { active: null, savedDocument: '' };
   try {
     return JSON.parse(sessionStorage.getItem(ACTIVE) ?? '{"active":null,"savedDocument":""}');
   } catch {
@@ -37,12 +42,13 @@ async function request(path: string, body?: unknown) {
   return data;
 }
 export function useLibrary() {
-  const local = !!document.querySelector('meta[name="forma-local"]');
+  const local = hosted || !!document.querySelector('meta[name="forma-local"]');
   const [info, setInfo] = useState<Library | null>(null),
     [error, setError] = useState(''),
     [active, setActive] = useState<OpenFile | null>(() => previousSession().active),
     [savedDocument, setSavedDocument] = useState(() => previousSession().savedDocument);
   useEffect(() => {
+    if (hosted) return;
     try {
       sessionStorage.setItem(ACTIVE, JSON.stringify({ active, savedDocument }));
     } catch {
@@ -78,7 +84,7 @@ export function useLibrary() {
       return value;
     } catch (e) {
       setError(
-        local
+        !hosted && local
           ? `Cannot reach the local library. Keep forma serve running. ${(e as Error).message}`
           : (e as Error).message,
       );
@@ -142,7 +148,8 @@ export function useLibrary() {
     [info, active, local, refresh],
   );
   const switchDirectory = async (directory: string) => {
-    if (!local) throw new Error('Start forma serve to connect a folder.');
+    if (!local || hosted)
+      throw new Error('Source folders are managed by the administrator in hosted mode.');
     const value = await request('library', { directory });
     setInfo(value);
     setActive(null);
@@ -205,9 +212,11 @@ export function LibraryDialog({
     <>
       <h2 id="modal-title">Your diagrams</h2>
       <p>
-        {library.info?.mode === 'local'
-          ? 'Files shared with your agents. Save explicitly; refresh to pick up changes made outside Forma.'
-          : 'Saved in this browser. To work with agents on the same files, run forma serve with your diagram folder.'}
+        {hosted
+          ? 'Your diagrams are stored privately on this organization’s server. Save explicitly; export a copy for your agent.'
+          : library.info?.mode === 'local'
+            ? 'Files shared with your agents. Save explicitly; refresh to pick up changes made outside Forma.'
+            : 'Saved in this browser. To work with agents on the same files, run forma serve with your diagram folder.'}
       </p>
       <div className="library-location">
         <strong>{library.info?.directory ?? 'Connecting…'}</strong>
@@ -223,6 +232,14 @@ export function LibraryDialog({
           Refresh
         </button>
       </div>
+      {library.info?.owner && <p className="help-text">Signed in as {library.info.owner}</p>}
+      {library.info?.quota && (
+        <p className="help-text">
+          {library.info.items.length} / {library.info.quota.files} diagrams ·{' '}
+          {((library.info.bytes ?? 0) / 1_000_000).toFixed(1)} /{' '}
+          {(library.info.quota.bytes / 1_000_000).toFixed(0)} MB used
+        </p>
+      )}
       {library.error && (
         <p role="alert" className="form-error">
           {library.error}
@@ -269,8 +286,9 @@ export function LibraryDialog({
           ))
         ) : (
           <div className="library-empty">
-            No diagrams here yet. Save the current diagram below, or ask your agent to create a
-            .forma.json file in this folder.
+            {hosted
+              ? 'No diagrams here yet. Save the current diagram, or import a native file from your agent using Open.'
+              : 'No diagrams here yet. Save the current diagram below, or ask your agent to create a .forma.json file in this folder.'}
           </div>
         )}
       </div>
@@ -335,39 +353,41 @@ export function LibraryDialog({
           Save diagram
         </button>
       </div>
-      <details>
-        <summary>Choose a source folder</summary>
-        {library.info?.mode === 'local' ? (
-          <>
-            <label className="field">
-              Absolute folder path
-              <input
-                value={directory}
-                onChange={(e) => setDirectory(e.target.value)}
-                placeholder="/Users/you/Diagrams"
-              />
-            </label>
-            <button
-              className="secondary"
-              disabled={pending}
-              onClick={() =>
-                run(async () => {
-                  await library.switchDirectory(directory);
-                  setFolder('');
-                })
-              }
-            >
-              Use this folder
-            </button>
-            <p className="help-text">
-              Subfolders are included. A missing folder is created. Existing diagrams are never
-              moved.
-            </p>
-          </>
-        ) : (
-          <code>forma serve --directory ~/Forma</code>
-        )}
-      </details>
+      {!hosted && (
+        <details>
+          <summary>Choose a source folder</summary>
+          {library.info?.mode === 'local' ? (
+            <>
+              <label className="field">
+                Absolute folder path
+                <input
+                  value={directory}
+                  onChange={(e) => setDirectory(e.target.value)}
+                  placeholder="/Users/you/Diagrams"
+                />
+              </label>
+              <button
+                className="secondary"
+                disabled={pending}
+                onClick={() =>
+                  run(async () => {
+                    await library.switchDirectory(directory);
+                    setFolder('');
+                  })
+                }
+              >
+                Use this folder
+              </button>
+              <p className="help-text">
+                Subfolders are included. A missing folder is created. Existing diagrams are never
+                moved.
+              </p>
+            </>
+          ) : (
+            <code>forma serve --directory ~/Forma</code>
+          )}
+        </details>
+      )}
       {message && (
         <p role="status" className="form-error">
           {message}

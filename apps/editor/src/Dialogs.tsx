@@ -1,3 +1,4 @@
+import { hosted } from './hosting';
 import { setupPrompt } from './setup-prompt';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { X, ArrowRight, Workflow, Blocks, FileJson, Terminal, Copy, Check } from 'lucide-react';
@@ -18,6 +19,9 @@ export function Dialogs({
   commit: (doc: Diagram) => void;
   notify: (s: string) => void;
 }) {
+  const agentPrompt = hosted
+    ? `Help me create or update a Forma diagram for my organization’s workspace at ${location.origin}. Install Forma using the installation instructions in https://github.com/joeycast/forma and read its bundled skills/forma/SKILL.md. Work on the native .forma.json document I provide, preserving stable IDs and human positioning/styles. Validate, inspect, render, and visually refine it. Return the edited native file and requested exports. I will use Open to import it and Save to store it in my private server library. Do not request my browser cookies or Google credentials. For edits, ask for the latest exported native document before changing anything.`
+    : setupPrompt;
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -221,13 +225,13 @@ export function Dialogs({
             </div>
             <label className="field">
               Give this prompt to your agent
-              <textarea className="setup-prompt" readOnly value={setupPrompt} rows={12} />
+              <textarea className="setup-prompt" readOnly value={agentPrompt} rows={12} />
             </label>
             <button
               className="primary"
               onClick={async () => {
                 try {
-                  await navigator.clipboard.writeText(setupPrompt);
+                  await navigator.clipboard.writeText(agentPrompt);
                   setCopied(true);
                 } catch {
                   notify('Clipboard unavailable. Select and copy the prompt above.');
@@ -240,7 +244,9 @@ export function Dialogs({
             <p className="modal-footnote">
               Agent guide: <code>skills/forma/SKILL.md</code>
               <br />
-              No account. No API key. No service to depend on.
+              {hosted
+                ? 'Your agent works with exported native files. Google credentials stay in your browser.'
+                : 'No account. No API key. No service to depend on.'}
             </p>
           </>
         )}

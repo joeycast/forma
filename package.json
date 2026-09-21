@@ -1,6 +1,6 @@
 {
   "name": "forma-diagrams",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Local-first professional diagrams for agents and humans",
   "type": "module",
   "license": "MIT",
@@ -30,11 +30,12 @@
     "@resvg/resvg-js": "^2.6.2",
     "@xyflow/react": "^12.10.0",
     "elkjs": "^0.11.0",
+    "google-auth-library": "^11.1.0",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "zod": "^4.0.0",
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -62,6 +63,8 @@
     "examples",
     "schema",
     "LICENSE",
-    "THIRD_PARTY_NOTICES.md"
+    "THIRD_PARTY_NOTICES.md",
+    "Dockerfile",
+    "deploy"
   ]
 }

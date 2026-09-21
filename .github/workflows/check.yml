@@ -15,3 +15,30 @@ jobs:
       - run: npm run check
       - run: npm run format:check
       - run: npm run schema && git diff --exit-code -- schema/
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t forma:test .
+      - name: Verify packaged hosted server
+        run: |
+          docker run -d --name forma-test -p 127.0.0.1:4250:4242 \
+            -e FORMA_PUBLIC_URL=https://forma.test \
+            -e FORMA_GOOGLE_CLIENT_ID=test-client \
+            -e FORMA_GOOGLE_CLIENT_SECRET=test-secret \
+            -e FORMA_ALLOWED_EMAILS=test@example.com forma:test
+          for attempt in $(seq 1 30); do
+            if curl -fsS -H 'Host: forma.test' http://127.0.0.1:4250/healthz; then break; fi
+            sleep 1
+          done
+          curl -fsS -H 'Host: forma.test' http://127.0.0.1:4250/ | grep 'forma-hosted'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: forma.test' http://127.0.0.1:4250/api/library)" = 401
+          docker stop forma-test
+          docker start forma-test
+          for attempt in $(seq 1 30); do
+            if curl -fsS -H 'Host: forma.test' http://127.0.0.1:4250/healthz; then break; fi
+            sleep 1
+          done
+          curl -fsS -H 'Host: forma.test' http://127.0.0.1:4250/healthz
+      - if: always()
+        run: docker logs forma-test || true

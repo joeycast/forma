@@ -1,3 +1,5 @@
+import { hosted } from './hosting';
+import type { Account } from './AuthGate';
 import { useLibrary, LibraryDialog } from './library';
 import { DesignSystems } from './DesignSystems';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -59,7 +61,7 @@ const kindIcons = {
   process: Zap,
   decision: GitBranch,
 };
-export function App() {
+export function App({ account }: { account?: Account }) {
   const { doc, commit, replace, undo, redo, canUndo, canRedo, saved } = useDocument();
   const library = useLibrary();
   const [scene, setScene] = useState<Scene | null>(null),
@@ -67,7 +69,7 @@ export function App() {
     [layoutError, setLayoutError] = useState('');
   const [selected, setSelected] = useState<string | null>(null),
     [inspectorTab, setInspectorTab] = useState('design');
-  const [modal, setModal] = useState(''),
+  const [modal, setModal] = useState(hosted ? 'library' : ''),
     [menu, setMenu] = useState(''),
     [toast, setToast] = useState(''),
     [search, setSearch] = useState('');
@@ -76,6 +78,19 @@ export function App() {
     [outline, setOutline] = useState(true),
     [showEdges, setShowEdges] = useState(false);
   const [mobileInspector, setMobileInspector] = useState(false);
+  const signingOut = useRef(false);
+  const unsavedHosted = hosted && canUndo && library.dirty(doc);
+  useEffect(() => {
+    if (!unsavedHosted) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!signingOut.current) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [unsavedHosted]);
   const docRef = useRef(doc);
   docRef.current = doc;
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -332,9 +347,19 @@ export function App() {
           <span>Workspace</span>
           <ChevronRight size={13} />
           <strong>{doc.title}</strong>
-          <span className="local-badge">Local</span>
+          <span className="local-badge">{hosted ? 'Hosted' : 'Local'}</span>
         </div>
         <div className="top-actions">
+          {account && (
+            <button
+              className="secondary account-button"
+              title={account.email}
+              onClick={() => setModal('signout')}
+            >
+              Sign out
+            </button>
+          )}
+
           <button className="secondary" onClick={() => setModal('library')}>
             Library
           </button>
@@ -349,7 +374,9 @@ export function App() {
                 ? library.dirty(doc)
                   ? 'Unsaved changes'
                   : 'Saved to library'
-                : 'Browser draft'}
+                : hosted
+                  ? 'Unsaved draft'
+                  : 'Browser draft'}
           </span>
           <button
             className="secondary"
@@ -730,6 +757,43 @@ export function App() {
                 setModal('');
               }}
             />
+          ) : modal === 'signout' ? (
+            <>
+              <h2 id="modal-title">Sign out of Forma?</h2>
+              <p>{account?.email}</p>
+              <p>
+                Save or export unsaved diagrams in all open tabs first. Hosted drafts are not kept
+                in this browser after sign-out.
+              </p>
+              <div className="modal-actions">
+                <button className="secondary" onClick={() => setModal('')}>
+                  Keep editing
+                </button>
+                <button
+                  className="primary"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch('/api/logout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-Forma-Request': '1' },
+                        body: '{}',
+                      });
+                      if (!response.ok && response.status !== 401)
+                        throw new Error('Could not sign out. Try again.');
+                      signingOut.current = true;
+                      const channel = new BroadcastChannel('forma-auth');
+                      channel.postMessage('signed-out');
+                      channel.close();
+                      location.reload();
+                    } catch (e) {
+                      notify((e as Error).message);
+                    }
+                  }}
+                >
+                  Sign out now
+                </button>
+              </div>
+            </>
           ) : undefined}
         </Dialogs>
       )}
