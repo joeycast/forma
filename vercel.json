@@ -4,9 +4,10 @@
   "outputDirectory": "dist",
   "installCommand": "npm ci",
   "rewrites": [
-    { "source": "/auth/:path*", "destination": "/api/auth/:path*" },
-    { "source": "/healthz", "destination": "/api/healthz" },
-    { "source": "/mcp", "destination": "/api/mcp" }
+    { "source": "/api/:path*", "destination": "/api" },
+    { "source": "/auth/:path*", "destination": "/api" },
+    { "source": "/healthz", "destination": "/api" },
+    { "source": "/mcp", "destination": "/api" }
   ],
   "headers": [
     {
