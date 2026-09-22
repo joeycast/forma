@@ -644,6 +644,20 @@ p {
   stroke-width: 2px;
   cursor: grab;
 }
+.segment-grip {
+  fill: #fff;
+  stroke: #8b70d1;
+  stroke-width: 1.5px;
+}
+.react-flow__edge.selected .react-flow__edgeupdater,
+.react-flow__edge:hover .react-flow__edgeupdater {
+  fill: #fff !important;
+  stroke: #8b70d1 !important;
+  stroke-width: 2px;
+}
+.canvas.reconnecting .react-flow__handle {
+  opacity: 1;
+}
 .port-list {
   display: grid;
   gap: 6px;
@@ -942,6 +956,57 @@ p {
 .field select {
   appearance: auto;
   min-height: 32px;
+}
+.link-list {
+  display: grid;
+  gap: 6px;
+}
+.link-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.link-row > button:first-child {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+  gap: 8px;
+  text-align: left;
+  border: 1px solid #e5e8ee;
+  border-radius: 5px;
+  padding: 7px 8px;
+  color: #5c6b7e;
+}
+.link-row > button:first-child span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.link-row strong,
+.link-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.link-row strong {
+  font-size: 11px;
+  font-weight: 500;
+  color: #3e4b5e;
+}
+.link-row small {
+  font-size: 10px;
+  color: #98a2b0;
+}
+.link-row > button:last-child:not(:only-child) {
+  flex: none;
+  border: 1px solid #e5e8ee;
+  border-radius: 5px;
+  padding: 0 8px;
+  font-size: 10px;
+  color: #7d6e9b;
+}
+.endpoint-field .text-button {
+  margin-top: 6px;
 }
 .theme-options {
   display: flex;

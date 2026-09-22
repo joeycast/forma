@@ -84,6 +84,46 @@ export function polylinePath(points: Point[], radius = 8): string {
   }
   return path + ` L ${points.at(-1)!.x} ${points.at(-1)!.y}`;
 }
+/** Slide one orthogonal segment, keeping both ends attached to their ports. */
+export function slideOrthogonalSegment(points: Point[], segment: number, value: number): Point[] {
+  if (points.length < 2 || segment < 0 || segment >= points.length - 1) return points;
+  const start = points[segment],
+    end = points[segment + 1];
+  const horizontal = Math.abs(start.y - end.y) <= Math.abs(start.x - end.x);
+  const next = points.map((p) => ({ ...p }));
+  const shift = (index: number) => {
+    next[index] = horizontal ? { ...next[index], y: value } : { ...next[index], x: value };
+  };
+  shift(segment);
+  shift(segment + 1);
+  if (segment === 0) {
+    const port = points[0],
+      moved = next[1];
+    next[0] = { ...port };
+    next.splice(1, 0, horizontal ? { x: port.x, y: moved.y } : { x: moved.x, y: port.y });
+  }
+  if (segment + 1 === points.length - 1) {
+    const port = points[points.length - 1],
+      at = next.length - 1,
+      moved = next[at - 1];
+    next[at] = { ...port };
+    next.splice(at, 0, horizontal ? { x: port.x, y: moved.y } : { x: moved.x, y: port.y });
+  }
+  return simplify(next);
+}
+/** Closest connection point on a shape to an existing line end. */
+export function nearestPort(box: Box, ports: PortCounts | undefined, point: Point) {
+  let best: { side: PortSide; index: number; distance: number } | undefined;
+  for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+    const count = ports?.[side] ?? 1;
+    for (let index = 0; index < count; index++) {
+      const candidate = portPoint(box, side, index, count);
+      const distance = Math.hypot(candidate.x - point.x, candidate.y - point.y);
+      if (!best || distance < best.distance) best = { side, index, distance };
+    }
+  }
+  return best ?? { side: 'right' as PortSide, index: 0, distance: 0 };
+}
 export function centerPortIndex(count: number) {
   return Math.floor((Math.max(1, count) - 1) / 2);
 }

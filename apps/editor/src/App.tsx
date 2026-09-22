@@ -149,13 +149,50 @@ export function App({ account }: { account?: Account }) {
     setInspectorTab('design');
   }, []);
   const selectIds = useCallback((ids: string[]) => setSelected(ids), []);
-  const choose = useCallback((id: string, extend: boolean) => {
+  const choose = useCallback(
+    (id: string, extend: boolean) => {
+      setInspectorTab('design');
+      if (doc.edges.some((edge) => edge.id === id)) setMobileInspector(true);
+      setSelected((current) => {
+        if (!extend) return [id];
+        return current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      });
+    },
+    [doc.edges],
+  );
+  const editEdge = useCallback((id: string) => {
     setInspectorTab('design');
-    setSelected((current) => {
-      if (!extend) return [id];
-      return current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
-    });
+    setMobileInspector(true);
+    setSelected([id]);
   }, []);
+  const retargetEdge = useCallback(
+    (id: string, connection: Connection) => {
+      if (!connection.source || !connection.target) return;
+      const read = (handle?: string | null) => {
+        const [side, raw] = handle?.split(':') ?? [];
+        if (side !== 'top' && side !== 'right' && side !== 'bottom' && side !== 'left') return null;
+        return { side: side as 'top' | 'right' | 'bottom' | 'left', index: Number(raw) };
+      };
+      const source = read(connection.sourceHandle),
+        target = read(connection.targetHandle);
+      const count = (nodeId: string, side: 'top' | 'right' | 'bottom' | 'left') =>
+        doc.nodes.find((node) => node.id === nodeId)?.ports?.[side] ?? 1;
+      const appearance: Record<string, string | number | null> = {};
+      if (source) {
+        appearance.sourcePort = source.side;
+        appearance.sourceIndex = count(connection.source, source.side) > 1 ? source.index : null;
+      }
+      if (target) {
+        appearance.targetPort = target.side;
+        appearance.targetIndex = count(connection.target, target.side) > 1 ? target.index : null;
+      }
+      patch({
+        edges: [{ id, source: connection.source, target: connection.target, appearance }],
+      });
+      editEdge(id);
+    },
+    [doc.nodes, editEdge, patch],
+  );
   const pinPositions = useCallback(
     (moves: { id: string; position: { x: number; y: number } }[]) => {
       if (!moves.length) return;
@@ -749,8 +786,10 @@ export function App({ account }: { account?: Account }) {
                 )
               }
               onConnect={connect}
+              onReconnect={retargetEdge}
               onDelete={remove}
               onPath={setPath}
+              onEditEdge={editEdge}
               fitKey={fitKey}
               grid={grid}
               onAdd={() => setMenu('add')}

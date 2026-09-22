@@ -11,6 +11,8 @@ import {
   isOrthogonal,
   segmentCross,
   routesCross,
+  slideOrthogonalSegment,
+  nearestPort,
 } from '../packages/core/src';
 
 const box = { x: 0, y: 0, width: 120, height: 60 };
@@ -151,6 +153,25 @@ test('a later connector takes a free channel instead of crossing', async () => {
   assert.equal(routesCross(ad.points, bc.points), false);
 });
 
+test('sliding a segment keeps both ends attached', () => {
+  const slid = slideOrthogonalSegment(
+    [
+      { x: 0, y: 50 },
+      { x: 100, y: 50 },
+      { x: 100, y: 150 },
+      { x: 200, y: 150 },
+    ],
+    1,
+    140,
+  );
+  assert.deepEqual(slid[0], { x: 0, y: 50 });
+  assert.deepEqual(slid.at(-1), { x: 200, y: 150 });
+  assert.ok(slid.some((point) => point.x === 140));
+  assert.equal(isOrthogonal(slid), true);
+  const port = nearestPort({ x: 0, y: 0, width: 120, height: 60 }, { right: 3 }, { x: 120, y: 15 });
+  assert.equal(port.side, 'right');
+  assert.equal(port.index, 0);
+});
 test('retarget slides the attached segment and keeps the channel', () => {
   const kept = retargetRoute(
     [

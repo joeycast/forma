@@ -96,7 +96,7 @@ Check the latest GitHub [release](https://github.com/joeycast/forma/releases) an
 ### Node (`forma host`)
 
 ```sh
-npm install -g https://github.com/joeycast/forma/releases/download/v0.5.0/forma-diagrams-0.5.0.tgz
+npm install -g https://github.com/joeycast/forma/releases/download/v0.5.1/forma-diagrams-0.5.1.tgz
 ```
 
 Restart the `forma host` process (or its supervisor). Leave `FORMA_DATA_DIR` pointed at the same disk. Verify `/healthz`, then sign in and open a known diagram.
@@ -109,7 +109,7 @@ Keep the named volumes. Rebuild and recreate the app container from the tag you 
 
 ```sh
 git fetch
-git checkout v0.5.0
+git checkout v0.5.1
 docker compose --env-file deploy/.env -f deploy/compose.yml up -d --build
 ```
 
@@ -123,7 +123,7 @@ If Production is **not** connected to GitHub (CLI deploys only), update by deplo
 
 ```sh
 git fetch
-git checkout v0.5.0
+git checkout v0.5.1
 vercel --prod --yes
 ```
 
