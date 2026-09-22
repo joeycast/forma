@@ -1716,6 +1716,23 @@
             },
             "additionalProperties": false
           }
+        },
+        "footer": {
+          "type": "object",
+          "properties": {
+            "hidden": {
+              "type": "boolean"
+            },
+            "label": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "detail": {
+              "type": "string",
+              "maxLength": 80
+            }
+          },
+          "additionalProperties": false
         }
       },
       "required": [

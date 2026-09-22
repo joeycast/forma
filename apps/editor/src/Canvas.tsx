@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   Handle,
+  NodeResizer,
   Position,
   Background,
   BackgroundVariant,
@@ -50,44 +51,62 @@ import {
   type Point,
   type PortSide,
 } from '../../../packages/core/src';
-type CardData = { node: SceneNode; theme: 'paper' | 'midnight'; down: boolean };
+type CardData = {
+  node: SceneNode;
+  theme: 'paper' | 'midnight';
+  down: boolean;
+  box?: { width: number; height: number };
+};
 const handlePosition = {
   top: Position.Top,
   right: Position.Right,
   bottom: Position.Bottom,
   left: Position.Left,
 } as const;
-const DiagramCard = memo(({ data, selected }: NodeProps<Node<CardData>>) => (
-  <div className={`diagram-card ${selected ? 'is-selected' : ''}`} data-node-id={data.node.id}>
-    {portSides.flatMap((side) => {
-      const count = data.node.semantic.ports?.[side] ?? 1;
-      return Array.from({ length: count }, (_, index) => {
-        const along = `${((index + 1) / (count + 1)) * 100}%`;
-        return (
-          <Handle
-            key={`${side}:${index}`}
-            id={`${side}:${index}`}
-            type="source"
-            position={handlePosition[side]}
-            style={side === 'top' || side === 'bottom' ? { left: along } : { top: along }}
-          />
-        );
-      });
-    })}
-    <svg
-      width={data.node.width}
-      height={data.node.height}
-      role="img"
-      aria-label={data.node.semantic.label}
-      dangerouslySetInnerHTML={{ __html: nodeMarkup(data.node, data.theme) }}
-    />
-    {data.node.pinned && (
-      <span className="pin-indicator" title="Position preserved">
-        ⌖
-      </span>
-    )}
-  </div>
-));
+const DiagramCard = memo(({ data, selected }: NodeProps<Node<CardData>>) => {
+  const box = data.box
+    ? { ...data.node, width: data.box.width, height: data.box.height }
+    : data.node;
+  return (
+    <div className={`diagram-card ${selected ? 'is-selected' : ''}`} data-node-id={data.node.id}>
+      <NodeResizer
+        isVisible={selected}
+        minWidth={80}
+        minHeight={40}
+        maxWidth={1200}
+        maxHeight={1600}
+        color="#8b70d1"
+      />
+      {portSides.flatMap((side) => {
+        const count = data.node.semantic.ports?.[side] ?? 1;
+        return Array.from({ length: count }, (_, index) => {
+          const along = `${((index + 1) / (count + 1)) * 100}%`;
+          return (
+            <Handle
+              key={`${side}:${index}`}
+              id={`${side}:${index}`}
+              type="source"
+              position={handlePosition[side]}
+              style={side === 'top' || side === 'bottom' ? { left: along } : { top: along }}
+            />
+          );
+        });
+      })}
+      <svg
+        width={box.width}
+        height={box.height}
+        role="img"
+        aria-label={data.node.semantic.label}
+        dangerouslySetInnerHTML={{ __html: nodeMarkup(box, data.theme) }}
+      />
+      {data.node.pinned && (
+        <span className="pin-indicator" title="Position preserved">
+          ⌖
+        </span>
+      )}
+    </div>
+  );
+});
 const Decoration = memo(({ data }: NodeProps) => (
   <svg
     width={data.width as number}
@@ -234,6 +253,7 @@ export function Canvas({
   onReconnect,
   onDelete,
   onPath,
+  onResize,
   onEditEdge,
   fitKey,
   grid,
@@ -250,11 +270,13 @@ export function Canvas({
   onDelete: (ids: string[]) => void;
   onEditEdge: (id: string) => void;
   onPath: (id: string, path: Point[] | null) => void;
+  onResize: (id: string, size: { width: number; height: number; x: number; y: number }) => void;
   fitKey: number;
   grid: boolean;
   onAdd: () => void;
 }) {
   const [dragPositions, setDragPositions] = useState<Record<string, { x: number; y: number }>>({}),
+    [sizes, setSizes] = useState<Record<string, { width: number; height: number }>>({}),
     [zoom, setZoom] = useState(100),
     [pan, setPan] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -262,12 +284,17 @@ export function Canvas({
   const [pathPreview, setPathPreview] = useState<{ id: string; path: Point[] } | null>(null);
   const [draftPoints, setDraftPoints] = useState<{ id: string; points: Point[] } | null>(null);
   const holdSelection = useRef(false);
+  const selectionFromCanvas = useRef(false);
+  const ignoreEcho = useRef(false);
   const selectedKey = selected.join('\0');
   const seenSelection = useRef(selectedKey);
   if (seenSelection.current !== selectedKey) {
     seenSelection.current = selectedKey;
-    holdSelection.current = true;
+    if (selectionFromCanvas.current) selectionFromCanvas.current = false;
+    else holdSelection.current = true;
   }
+  const positions = useRef(dragPositions);
+  const resizing = useRef(new Set<string>());
   const { fitView, zoomIn, zoomOut } = useReactFlow();
   const nodes = useMemo(() => {
     const theme = scene.document.presentation.theme,
@@ -312,14 +339,26 @@ export function Canvas({
         id: n.id,
         type: 'diagram',
         position: dragPositions[n.id] ?? { x: n.x, y: n.y },
-        data: { node: n, theme, down: scene.document.layout.direction === 'DOWN' },
+        width: sizes[n.id]?.width ?? n.width,
+        height: sizes[n.id]?.height ?? n.height,
+        measured: {
+          width: sizes[n.id]?.width ?? n.width,
+          height: sizes[n.id]?.height ?? n.height,
+        },
+        data: {
+          node: n,
+          theme,
+          down: scene.document.layout.direction === 'DOWN',
+          box: sizes[n.id],
+        },
         selected: selected.includes(n.id),
         ariaLabel: n.semantic.label,
       })),
     ];
-  }, [scene, selected, dragPositions]);
+  }, [scene, selected, dragPositions, sizes]);
   useEffect(() => {
     setDragPositions({});
+    setSizes({});
   }, [scene]);
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -409,6 +448,7 @@ export function Canvas({
             ),
             type: 'diagram',
             reconnectable: true,
+            zIndex: selected.includes(e.id) ? 1000 : 0,
             selected: selected.includes(e.id),
             data: {
               edge,
@@ -456,11 +496,34 @@ export function Canvas({
               : [],
           );
           if (moved.length) {
-            setDragPositions((current) => {
-              const next = { ...current };
-              for (const move of moved) next[move.id] = { x: move.x, y: move.y };
-              return next;
-            });
+            const next = { ...positions.current };
+            let changed = false;
+            for (const move of moved) {
+              const current = next[move.id] ?? scene.nodes.find((node) => node.id === move.id);
+              if (current && current.x === move.x && current.y === move.y) continue;
+              next[move.id] = { x: move.x, y: move.y };
+              changed = true;
+            }
+            if (changed) {
+              positions.current = next;
+              setDragPositions(next);
+            }
+          }
+          for (const change of changes) {
+            if (change.type !== 'dimensions' || !change.dimensions) continue;
+            if (change.resizing) resizing.current.add(change.id);
+            if (!resizing.current.has(change.id)) continue;
+            const size = {
+              width: change.dimensions.width,
+              height: change.dimensions.height,
+            };
+            setSizes((current) => ({ ...current, [change.id]: size }));
+            if (change.resizing === false) {
+              resizing.current.delete(change.id);
+              const place = positions.current[change.id] ??
+                scene.nodes.find((node) => node.id === change.id) ?? { x: 0, y: 0 };
+              onResize(change.id, { ...size, x: place.x, y: place.y });
+            }
           }
           const completed = moved.filter((move) => move.dragging === false);
           if (completed.length) onMove(completed);
@@ -470,6 +533,10 @@ export function Canvas({
             ...picked.filter((n) => n.type === 'diagram').map((n) => n.id),
             ...pickedEdges.map((e) => e.id),
           ];
+          if (ignoreEcho.current) {
+            ignoreEcho.current = false;
+            return;
+          }
           if (holdSelection.current) {
             if (ids.length === selected.length && ids.every((id) => selected.includes(id)))
               holdSelection.current = false;
@@ -477,13 +544,23 @@ export function Canvas({
           }
           if (!ids.length) return;
           if (ids.length === selected.length && ids.every((id) => selected.includes(id))) return;
+          selectionFromCanvas.current = true;
           onSelect(ids);
         }}
         onSelectionStart={() => {
           holdSelection.current = false;
         }}
-        onNodeClick={() => {
+        onNodeClick={(event, node) => {
           holdSelection.current = false;
+          ignoreEcho.current = true;
+          const extend = event.shiftKey || event.metaKey || event.ctrlKey;
+          const next = extend
+            ? selected.includes(node.id)
+              ? selected.filter((id) => id !== node.id)
+              : [...selected, node.id]
+            : [node.id];
+          selectionFromCanvas.current = true;
+          onSelect(next);
         }}
         onPaneClick={() => {
           holdSelection.current = false;
@@ -497,6 +574,8 @@ export function Canvas({
         onReconnectEnd={() => setReconnecting(false)}
         onEdgeClick={(_, edge) => {
           holdSelection.current = false;
+          ignoreEcho.current = true;
+          selectionFromCanvas.current = true;
           onEditEdge(edge.id);
         }}
         connectionMode={ConnectionMode.Loose}
@@ -509,8 +588,9 @@ export function Canvas({
         snapGrid={[8, 8]}
         panOnDrag={pan ? true : [1, 2]}
         selectionOnDrag={!pan}
+        selectNodesOnDrag={false}
         nodesDraggable={!pan}
-        selectionKeyCode="Shift"
+        selectionKeyCode={null}
         proOptions={{ hideAttribution: false }}
       >
         {grid && <Background variant={BackgroundVariant.Dots} gap={8} size={1} color="#cbd1dc" />}

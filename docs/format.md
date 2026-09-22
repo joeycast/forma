@@ -56,6 +56,8 @@ Content and relationships remain intact when changing identity. Use coherent for
 | Canvas  | `background`, `text`, `secondary`, `border`, `fontFamily`                                                                                                                                                                                                                                  |
 | Spacing | `node` and `layer`, in scene pixels; override the legacy spacing preset                                                                                                                                                                                                                    |
 
+`presentation.footer` changes the sheet footer. `hidden: true` removes the rule and both captions and the space they occupy. `label` replaces the left caption (default `FORMA / TYPE`). `detail` replaces the right caption (default component and relationship counts). Omit a caption, or patch it to `null`, to restore that default.
+
 Paint values are hex colors, `none`, or `transparent`. Dash is solid/dashed/dotted. Width is explicit; height is a minimum that grows to avoid clipping text. Pills, diamonds, and ellipses center their content unless `align` or `verticalAlign` says otherwise. Plain text nodes omit the surrounding shape and are useful for diagram annotations. All values are bounded and data-only: no CSS, remote URLs, or raw SVG fragments.
 
 ## Connection points and paths

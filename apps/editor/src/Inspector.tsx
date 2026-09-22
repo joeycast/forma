@@ -35,11 +35,13 @@ export function TextField({
   value,
   onChange,
   multiline = false,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => boolean;
   multiline?: boolean;
+  placeholder?: string;
 }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
@@ -52,6 +54,7 @@ export function TextField({
       {multiline ? (
         <textarea
           value={draft}
+          placeholder={placeholder}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           rows={3}
@@ -59,6 +62,7 @@ export function TextField({
       ) : (
         <input
           value={draft}
+          placeholder={placeholder}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => {
@@ -657,6 +661,7 @@ export function Inspector({
                   multiline
                   onChange={(description) => patch({ description })}
                 />
+                <FooterFields doc={doc} patch={patch} />
               </section>
             )}
             {!selected.length && (
@@ -809,6 +814,46 @@ export function Inspector({
 }
 function MouseTip() {
   return <Crosshair size={19} />;
+}
+function FooterFields({ doc, patch }: { doc: Diagram; patch: (p: Patch) => boolean }) {
+  const footer = doc.presentation.footer;
+  const hidden = !!footer?.hidden;
+  const kind = doc.type.replaceAll('-', ' ');
+  return (
+    <div className="field">
+      Footer
+      <span className="segmented">
+        <button
+          className={hidden ? '' : 'active'}
+          onClick={() => patch({ footer: { hidden: null } })}
+        >
+          Show
+        </button>
+        <button
+          className={hidden ? 'active' : ''}
+          onClick={() => patch({ footer: { hidden: true } })}
+        >
+          Hide
+        </button>
+      </span>
+      {!hidden && (
+        <>
+          <TextField
+            label="Left label"
+            value={footer?.label ?? ''}
+            placeholder={`FORMA / ${kind.toUpperCase()}`}
+            onChange={(label) => patch({ footer: { label: label.trim() || null } })}
+          />
+          <TextField
+            label="Right detail"
+            value={footer?.detail ?? ''}
+            placeholder="Component and relationship counts"
+            onChange={(detail) => patch({ footer: { detail: detail.trim() || null } })}
+          />
+        </>
+      )}
+    </div>
+  );
 }
 function labelOf(doc: Diagram, id: string) {
   return doc.nodes.find((node) => node.id === id)?.label ?? id;

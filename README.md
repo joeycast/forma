@@ -15,7 +15,7 @@ The engine uses general nodes, shapes, groups, relationships, and content-sized 
 Requires Node.js 22+. No build step is needed for a release install:
 
 ```sh
-npm install -g https://github.com/joeycast/forma/releases/download/v0.5.1/forma-diagrams-0.5.1.tgz
+npm install -g https://github.com/joeycast/forma/releases/download/v0.5.2/forma-diagrams-0.5.2.tgz
 forma serve --directory ~/Forma
 ```
 

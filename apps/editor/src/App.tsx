@@ -160,6 +160,21 @@ export function App({ account }: { account?: Account }) {
     },
     [doc.edges],
   );
+  const resizeNode = useCallback(
+    (id: string, size: { width: number; height: number; x: number; y: number }) => {
+      const clamp = (value: number, min: number, max: number) =>
+        Math.round(Math.min(max, Math.max(min, value)));
+      patch({
+        overrides: {
+          [id]: {
+            style: { width: clamp(size.width, 80, 1200), height: clamp(size.height, 40, 1600) },
+            position: { x: Math.round(size.x), y: Math.round(size.y) },
+          },
+        },
+      });
+    },
+    [patch],
+  );
   const editEdge = useCallback((id: string) => {
     setInspectorTab('design');
     setMobileInspector(true);
@@ -789,6 +804,7 @@ export function App({ account }: { account?: Account }) {
               onReconnect={retargetEdge}
               onDelete={remove}
               onPath={setPath}
+              onResize={resizeNode}
               onEditEdge={editEdge}
               fitKey={fitKey}
               grid={grid}

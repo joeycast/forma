@@ -438,7 +438,12 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
     nodes,
     groups,
     edges,
-    bounds: { x: minX - 56, y: minY - header, width, height: maxY - minY + header + 76 },
+    bounds: {
+      x: minX - 56,
+      y: minY - header,
+      width,
+      height: maxY - minY + header + (doc.presentation.footer?.hidden ? 28 : 76),
+    },
     titleLines,
     descriptionLines,
   };

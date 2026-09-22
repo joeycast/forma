@@ -648,6 +648,20 @@ p {
   fill: #fff;
   stroke: #8b70d1;
   stroke-width: 1.5px;
+  pointer-events: all;
+}
+.react-flow__edges svg:has(> .react-flow__edge.selected) {
+  z-index: 1000 !important;
+}
+.react-flow__resize-control.handle {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid #8b70d1;
+  border-radius: 2px;
+  background: #fff;
+}
+.react-flow__resize-control.line {
+  border-color: #cfc4ea;
 }
 .react-flow__edge.selected .react-flow__edgeupdater,
 .react-flow__edge:hover .react-flow__edgeupdater {

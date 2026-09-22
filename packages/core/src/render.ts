@@ -143,11 +143,17 @@ export function frameMarkup(scene: Scene): string {
     theme = { ...themes[doc.presentation.theme], ...doc.presentation.designSystem?.canvas };
   const x = b.x + 56,
     titleY = b.y + 54;
-  return `${scene.titleLines.map((l, i) => t(x, titleY + i * 38, l, 30, theme.text, 600, 'letter-spacing="-.7"')).join('')}
-  ${scene.descriptionLines.map((l, i) => t(x, titleY + scene.titleLines.length * 38 - 7 + i * 19, l, 13, theme.secondary)).join('')}
+  const heading = `${scene.titleLines.map((l, i) => t(x, titleY + i * 38, l, 30, theme.text, 600, 'letter-spacing="-.7"')).join('')}
+  ${scene.descriptionLines.map((l, i) => t(x, titleY + scene.titleLines.length * 38 - 7 + i * 19, l, 13, theme.secondary)).join('')}`;
+  const footer = doc.presentation.footer;
+  if (footer?.hidden) return heading;
+  const label = footer?.label ?? `FORMA  /  ${doc.type.toUpperCase()}`;
+  const detail =
+    footer?.detail ?? `${scene.nodes.length} components  ·  ${scene.edges.length} relationships`;
+  return `${heading}
   <line x1="${x}" y1="${b.y + b.height - 44}" x2="${b.x + b.width - 56}" y2="${b.y + b.height - 44}" stroke="${theme.border}"/>
-  ${t(x, b.y + b.height - 22, 'FORMA  /  ' + doc.type.toUpperCase(), 9, theme.secondary, 500, 'letter-spacing="1.6"')}
-  ${t(b.x + b.width - 56, b.y + b.height - 22, `${scene.nodes.length} components  ·  ${scene.edges.length} relationships`, 10, theme.secondary, 400, 'text-anchor="end"')}`;
+  ${label ? t(x, b.y + b.height - 22, label, 9, theme.secondary, 500, 'letter-spacing="1.6"') : ''}
+  ${detail ? t(b.x + b.width - 56, b.y + b.height - 22, detail, 10, theme.secondary, 400, 'text-anchor="end"') : ''}`;
 }
 export interface SvgOptions {
   fontDataUri?: string;

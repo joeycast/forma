@@ -93,6 +93,14 @@ export const documentSchema = z
               .strict(),
           )
           .default({}),
+        footer: z
+          .object({
+            hidden: z.boolean().optional(),
+            label: z.string().max(80).optional(),
+            detail: z.string().max(80).optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .default({ theme: 'paper', nodes: {} }),
@@ -233,6 +241,15 @@ export const patchSchema = z
       .optional(),
     theme: z.enum(['paper', 'midnight']).optional(),
     designSystem: designSystemSchema.nullable().optional(),
+    footer: z
+      .object({
+        hidden: z.boolean().nullable().optional(),
+        label: z.string().max(80).nullable().optional(),
+        detail: z.string().max(80).nullable().optional(),
+      })
+      .strict()
+      .nullable()
+      .optional(),
     overrides: z
       .record(
         id,
@@ -259,6 +276,14 @@ export function patchDocument(input: Diagram, raw: unknown): Diagram {
   if (patch.theme) doc.presentation.theme = patch.theme;
   if (patch.designSystem === null) delete doc.presentation.designSystem;
   else if (patch.designSystem) doc.presentation.designSystem = patch.designSystem;
+  if (patch.footer === null) delete doc.presentation.footer;
+  else if (patch.footer) {
+    const merged: Record<string, unknown> = { ...doc.presentation.footer, ...patch.footer };
+    for (const [key, value] of Object.entries(merged)) if (value === null) delete merged[key];
+    if (Object.keys(merged).length)
+      doc.presentation.footer = merged as Diagram['presentation']['footer'];
+    else delete doc.presentation.footer;
+  }
   for (const key of ['nodes', 'edges', 'groups'] as const) {
     const map = new Map<string, Record<string, unknown>>(doc[key].map((n) => [n.id, { ...n }]));
     for (const item of patch[key] ?? []) {
@@ -359,6 +384,7 @@ function hasV2Features(doc: Diagram): boolean {
   return !!(
     !['architecture', 'flow'].includes(doc.type) ||
     doc.presentation.designSystem ||
+    doc.presentation.footer ||
     doc.layout.mode ||
     doc.nodes.some(
       (n) =>
