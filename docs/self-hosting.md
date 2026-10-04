@@ -96,12 +96,12 @@ Check the latest GitHub [release](https://github.com/joeycast/forma/releases) an
 ### Node (`forma host`)
 
 ```sh
-npm install -g https://github.com/joeycast/forma/releases/download/v0.5.2/forma-diagrams-0.5.2.tgz
+npm update -g forma-diagrams
 ```
 
 Restart the `forma host` process (or its supervisor). Leave `FORMA_DATA_DIR` pointed at the same disk. Verify `/healthz`, then sign in and open a known diagram.
 
-The npm registry package `forma-diagrams` is prepared but not published yet. Until it is, use the GitHub tarball above. Source checkouts update with `git fetch` and a checkout of the release tag, then `npm ci && npm run build`, then restart.
+For a first installation, use `npm install -g forma-diagrams`. Source checkouts update with `git fetch` and a checkout of the release tag, then `npm ci && npm run build`, then restart.
 
 ### Docker Compose
 

@@ -3,7 +3,7 @@
 Requires Node.js 22+ and npm. Start with the released package:
 
 ```sh
-npm install -g https://github.com/joeycast/forma/releases/download/v0.5.2/forma-diagrams-0.5.2.tgz
+npm install -g forma-diagrams
 forma serve --directory ~/Forma
 ```
 
@@ -45,6 +45,6 @@ npm run build
 node packages/cli/bin.mjs serve --directory ~/Forma
 ```
 
-Install a newer release tarball to update. The diagrams directory is separate from the application and is not replaced. Each GitHub [release](https://github.com/joeycast/forma/releases) includes a checksum file. The npm registry package `forma-diagrams` is not published yet; do not install similarly named packages. Hosted instances (Node, Docker, Vercel) follow [Updating a hosted instance](self-hosting.md#updating-a-hosted-instance).
+Run `npm update -g forma-diagrams` to update. The diagrams directory is separate from the application and is not replaced. GitHub [releases](https://github.com/joeycast/forma/releases) also include versioned tarballs and checksum files. Hosted instances (Node, Docker, Vercel) follow [Updating a hosted instance](self-hosting.md#updating-a-hosted-instance).
 
 Static hosting of `dist/` remains supported. Google sign-in, private server-side user libraries, and optional agent tokens are available through the separate authenticated `forma host` mode; see [self-hosting](self-hosting.md). The local `serve` command only binds to loopback and must not be reverse-proxied onto the internet.
