@@ -1,6 +1,6 @@
 {
   "name": "forma-diagrams",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Local-first professional diagrams for agents and humans",
   "type": "module",
   "license": "MIT",
@@ -35,7 +35,7 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@resvg/resvg-js": "^2.6.2",
     "@vercel/blob": "^2.8.0",
     "@xyflow/react": "^12.10.0",

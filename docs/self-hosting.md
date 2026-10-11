@@ -109,7 +109,7 @@ Keep the named volumes. Rebuild and recreate the app container from the tag you 
 
 ```sh
 git fetch
-git checkout v0.5.2
+git checkout v0.5.3
 docker compose --env-file deploy/.env -f deploy/compose.yml up -d --build
 ```
 
@@ -123,7 +123,7 @@ If Production is **not** connected to GitHub (CLI deploys only), update by deplo
 
 ```sh
 git fetch
-git checkout v0.5.2
+git checkout v0.5.3
 vercel --prod --yes
 ```
 
