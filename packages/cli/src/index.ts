@@ -22,6 +22,7 @@ import {
   mergeAlignmentPins,
   type AlignEdge,
   type DistributeAxis,
+  previewDocumentPatch,
 } from '../../core/src/index';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -99,6 +100,8 @@ async function main() {
       maxBytes: Number(process.env.FORMA_USER_BYTES ?? 100_000_000),
       maxFiles: Number(process.env.FORMA_USER_FILES ?? 1000),
       maxUsers: Number(process.env.FORMA_MAX_USERS ?? 500),
+      maxSystemSnapshots: Number(process.env.FORMA_SYSTEM_SNAPSHOTS ?? 100),
+      maxSystemBytes: Number(process.env.FORMA_SYSTEM_BYTES ?? 10 * 1024 * 1024),
       enableMcp: process.env.FORMA_ENABLE_MCP === 'true',
     });
     output({ ok: true, command, url });
@@ -198,7 +201,7 @@ async function main() {
   if (!command || command === '--help' || command === 'help') {
     output({
       name: 'forma',
-      version: '0.5.3',
+      version: '0.6.0',
       usage: [
         'forma serve [--directory ~/Forma] [--port 4242]',
         'forma host (configured with FORMA_* environment variables)',
@@ -208,7 +211,7 @@ async function main() {
         'forma migrate diagram.forma.json [--output upgraded.forma.json]',
         'forma style diagram.forma.json --system brand.json [--output styled.forma.json]',
         'forma validate diagram.forma.json',
-        'forma patch diagram.forma.json --patch changes.json [--output diagram.forma.json]',
+        'forma patch diagram.forma.json --patch changes.json [--output diagram.forma.json] [--dry-run]',
         'forma layout diagram.forma.json --output scene.json',
         'forma render diagram.forma.json --output diagram.svg|diagram.png',
         'forma export diagram.forma.json --output diagram.svg|diagram.png',
@@ -238,6 +241,10 @@ async function main() {
       options.strict = true;
       continue;
     }
+    if (arg === '--dry-run') {
+      options['dry-run'] = true;
+      continue;
+    }
     if (!['--output', '--template', '--patch', '--system'].includes(arg))
       throw new Error(`Unknown option: ${arg}`);
     if (!args[i + 1] || args[i + 1].startsWith('--')) throw new Error(`Missing value for ${arg}`);
@@ -251,7 +258,7 @@ async function main() {
         : command === 'create'
           ? ['template', 'output']
           : command === 'patch'
-            ? ['patch', 'output']
+            ? ['patch', 'output', 'dry-run']
             : command === 'inspect'
               ? ['strict']
               : command === 'validate'
@@ -323,7 +330,20 @@ async function main() {
   }
   if (command === 'patch') {
     if (typeof options.patch !== 'string') throw new Error('--patch is required');
-    const updated = patchDocument(doc, await json(options.patch));
+    const preview = previewDocumentPatch(doc, await json(options.patch));
+    if (options['dry-run']) {
+      output({
+        ok: true,
+        command,
+        dryRun: true,
+        candidateFingerprint: preview.candidateFingerprint,
+        summary: preview.summary,
+        changes: preview.changes,
+        candidate: preview.candidate,
+      });
+      return;
+    }
+    const updated = preview.candidate;
     await atomic(target ?? positional[0], serializeDocument(updated));
     output({ ok: true, command, output: resolve(target ?? positional[0]) });
     return;

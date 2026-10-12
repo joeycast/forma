@@ -8,6 +8,7 @@ export interface Box {
 }
 export interface SceneNode extends Box {
   style?: ElementStyle;
+  variant?: 'classic' | 'shape';
   id: string;
   semantic: DiagramNode;
   titleLines: string[];
@@ -23,6 +24,7 @@ export interface SceneGroup extends Box {
 }
 export interface SceneEdge {
   style?: ElementStyle;
+  routingBudgetExceeded?: boolean;
   id: string;
   semantic: DiagramEdge;
   points: Point[];

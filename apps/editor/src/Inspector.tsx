@@ -12,14 +12,19 @@ import {
   SlidersHorizontal,
   Crosshair,
 } from 'lucide-react';
+import './Inspector.css';
 import {
   accents,
   resolveNodeStyle,
   resolveEdgeStyle,
+  resolveGroupStyle,
+  resolveNodeStyleProperty,
+  resolveEdgeStyleProperty,
+  resolveGroupStyleProperty,
   atelier,
   signal,
   type ElementStyle,
-  inspectScene,
+  type InspectionResult,
   type Diagram,
   type Patch,
   type Scene,
@@ -30,6 +35,22 @@ import {
   portSides,
   insertWaypoint,
 } from '../../../packages/core/src';
+import { SHAPE_NAMES, SHAPE_REGISTRY } from '../../../packages/core/src/shapes';
+
+const mixedRolePlaceholder = '__forma_mixed__';
+
+function roleOptions(doc: Diagram, currentRole?: string) {
+  const roles = Object.keys(doc.presentation.designSystem?.roles ?? {}).filter((role) =>
+    /^[a-zA-Z][a-zA-Z0-9_-]{0,79}$/.test(role),
+  );
+  const currentIsUndefined = !!currentRole && !roles.includes(currentRole);
+  if (currentIsUndefined) roles.push(currentRole);
+  return roles.map((role) => ({
+    role,
+    label: currentIsUndefined && role === currentRole ? `${role} (undefined in system)` : role,
+  }));
+}
+
 export function TextField({
   label,
   value,
@@ -73,9 +94,109 @@ export function TextField({
     </label>
   );
 }
+
+function NumberField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => boolean;
+  min?: number;
+  max?: number;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const commit = () => {
+    const next = Number(draft);
+    if (
+      !Number.isFinite(next) ||
+      (min !== undefined && next < min) ||
+      (max !== undefined && next > max) ||
+      !onChange(next)
+    )
+      setDraft(String(value));
+  };
+  return (
+    <label className="field">
+      {label}
+      <input
+        type="number"
+        min={min}
+        max={max}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+      />
+    </label>
+  );
+}
+
+function NumberControl({
+  value,
+  onCommit,
+}: {
+  value: number | undefined;
+  onCommit: (value: number | null) => void;
+}) {
+  const [draft, setDraft] = useState(value == null ? '' : String(value));
+  useEffect(() => setDraft(value == null ? '' : String(value)), [value]);
+  const commit = () => {
+    if (draft === '') onCommit(null);
+    else if (Number.isFinite(Number(draft))) onCommit(Number(draft));
+    else setDraft(value == null ? '' : String(value));
+  };
+  return (
+    <input
+      type="number"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+      }}
+    />
+  );
+}
+
+function PaintValue({
+  label,
+  value,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  onCommit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    if (draft !== value) onCommit(draft);
+  };
+  return (
+    <input
+      aria-label={label}
+      value={draft}
+      placeholder="Unset"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+      }}
+    />
+  );
+}
 export function Inspector({
   doc,
   scene,
+  inspection,
+  inspectionState,
   selected,
   patch,
   onDelete,
@@ -86,9 +207,11 @@ export function Inspector({
   setTab,
   onDesignSystems,
 }: {
-  onDesignSystems: () => void;
+  onDesignSystems: (event: React.MouseEvent<HTMLButtonElement>) => void;
   doc: Diagram;
   scene: Scene | null;
+  inspection: InspectionResult | null;
+  inspectionState: 'pending' | 'unavailable' | 'stale' | 'failed' | 'ready';
   selected: string[];
   patch: (p: Patch) => boolean;
   onDelete: (ids: string[]) => void;
@@ -103,7 +226,6 @@ export function Inspector({
     edge = selectedNodes.length ? undefined : doc.edges.find((e) => selected.includes(e.id)),
     group =
       selectedNodes.length || edge ? undefined : doc.groups.find((g) => selected.includes(g.id));
-  const inspection = scene ? inspectScene(scene) : null;
   useEffect(() => {
     document.querySelector('.inspector-scroll')?.scrollTo({ top: 0 });
   }, [selected]);
@@ -127,15 +249,29 @@ export function Inspector({
                 <CheckCircle2 size={22} />
                 <h3>
                   {!inspection
-                    ? 'Composing…'
-                    : inspection.issues.length
-                      ? 'Room to refine'
-                      : 'Looking good'}
+                    ? inspectionState === 'pending'
+                      ? 'Checking layout'
+                      : inspectionState === 'failed'
+                        ? 'Latest layout failed'
+                        : 'Checks unavailable'
+                    : inspectionState === 'failed'
+                      ? 'Latest layout failed'
+                      : inspectionState === 'stale'
+                        ? 'Previous preview checks'
+                        : inspection.issues.length
+                          ? 'Room to refine'
+                          : 'Looking good'}
                 </h3>
                 <p>
-                  {inspection?.issues.length
-                    ? 'Review these suggestions to improve your diagram.'
-                    : 'No overlaps, collisions, or spacing issues detected.'}
+                  {!inspection
+                    ? inspectionState === 'pending'
+                      ? 'Quality checks will appear when layout finishes.'
+                      : 'A matching inspection is not available for this layout.'
+                    : inspectionState === 'failed' || inspectionState === 'stale'
+                      ? 'These checks describe the last successful preview.'
+                      : inspection.issues.length
+                        ? 'Review these suggestions to improve your diagram.'
+                        : 'No overlaps, collisions, or spacing issues detected.'}
                 </p>
               </div>
               <div className="stat-grid">
@@ -213,6 +349,97 @@ export function Inspector({
                     </button>
                   ))}
                 </div>
+                <div className="inspector-mixed">
+                  <h3>Shared properties</h3>
+                  <label className="field">
+                    Role
+                    <select
+                      value={
+                        selectedNodes.every((item) => item.role === selectedNodes[0].role)
+                          ? (selectedNodes[0].role ?? '')
+                          : mixedRolePlaceholder
+                      }
+                      onChange={(e) => {
+                        if (e.target.value === mixedRolePlaceholder) return;
+                        patch({
+                          nodes: selectedNodes.map((item) => ({
+                            id: item.id,
+                            role: e.target.value || null,
+                          })),
+                        });
+                      }}
+                    >
+                      <option value={mixedRolePlaceholder} disabled>
+                        Mixed values
+                      </option>
+                      <option value="">No role</option>
+                      {roleOptions(
+                        doc,
+                        selectedNodes.every((item) => item.role === selectedNodes[0].role)
+                          ? selectedNodes[0].role
+                          : undefined,
+                      ).map(({ role, label }) => (
+                        <option key={role} value={role}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {(['fill', 'stroke', 'opacity', 'strokeWidth', 'fontSize'] as const).map(
+                    (key) => {
+                      const values = selectedNodes.map((item) => resolveNodeStyle(doc, item)[key]);
+                      const common = values.every((value) => value === values[0])
+                        ? values[0]
+                        : undefined;
+                      const color = key === 'fill' || key === 'stroke';
+                      return (
+                        <div className="property-control" key={key}>
+                          <label className="field">
+                            {key === 'strokeWidth'
+                              ? 'Stroke width'
+                              : key === 'fontSize'
+                                ? 'Font size'
+                                : key[0].toUpperCase() + key.slice(1)}
+                            <input
+                              type={
+                                color && common !== undefined ? 'color' : color ? 'text' : 'number'
+                              }
+                              placeholder={common === undefined ? 'Mixed values' : undefined}
+                              value={common == null ? '' : String(common)}
+                              onChange={(e) => {
+                                const value = color ? e.target.value : Number(e.target.value);
+                                patch({
+                                  overrides: Object.fromEntries(
+                                    selectedNodes.map((item) => [
+                                      item.id,
+                                      { style: { [key]: value } },
+                                    ]),
+                                  ),
+                                });
+                              }}
+                            />
+                          </label>
+                          <button
+                            className="text-button"
+                            type="button"
+                            onClick={() =>
+                              patch({
+                                overrides: Object.fromEntries(
+                                  selectedNodes.map((item) => [
+                                    item.id,
+                                    { style: { [key]: null } },
+                                  ]),
+                                ),
+                              })
+                            }
+                          >
+                            Reset overrides
+                          </button>
+                        </div>
+                      );
+                    },
+                  )}
+                </div>
                 <div className="align-actions">
                   <button
                     className="secondary"
@@ -260,6 +487,22 @@ export function Inspector({
                   value={node.kind}
                   onChange={(kind) => patch({ nodes: [{ id: node.id, kind }] })}
                 />
+                <label className="field role-label">
+                  Role
+                  <select
+                    value={node.role ?? ''}
+                    onChange={(e) =>
+                      patch({ nodes: [{ id: node.id, role: e.target.value || null }] })
+                    }
+                  >
+                    <option value="">No role</option>
+                    {roleOptions(doc, node.role).map(({ role, label }) => (
+                      <option key={role} value={role}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label className="field">
                   Group
                   <select
@@ -381,8 +624,98 @@ export function Inspector({
                 </div>
                 <StyleFields
                   style={resolveNodeStyle(doc, node)}
-                  onChange={(style) => patch({ overrides: { [node.id]: { style } } })}
+                  property={(key) => resolveNodeStyleProperty(doc, node, key)}
+                  onChange={(style) =>
+                    patch({
+                      overrides: {
+                        [node.id]: { style, ...(style.shape ? { variant: 'shape' } : {}) },
+                      },
+                    })
+                  }
+                  onReset={(key, source) =>
+                    source === 'element'
+                      ? patch({ nodes: [{ id: node.id, style: { [key]: null } }] })
+                      : patch({ overrides: { [node.id]: { style: { [key]: null } } } })
+                  }
+                  onVariant={(variant) => patch({ overrides: { [node.id]: { variant } } })}
                 />
+                <details className="style-fields" open>
+                  <summary>Precise geometry</summary>
+                  <p className="help-text">
+                    X/Y show the effective canvas position: pinned when a position is saved,
+                    otherwise composed from the current layout.
+                  </p>
+                  <div className="geometry-grid">
+                    {(['x', 'y'] as const).map((axis) => (
+                      <NumberField
+                        key={axis}
+                        label={`${axis.toUpperCase()} position`}
+                        value={
+                          doc.presentation.nodes[node.id]?.position?.[axis] ??
+                          scene?.nodes.find((item) => item.id === node.id)?.[axis] ??
+                          0
+                        }
+                        onChange={(value) => {
+                          const current = doc.presentation.nodes[node.id]?.position ?? {
+                            x: scene?.nodes.find((item) => item.id === node.id)?.x ?? 0,
+                            y: scene?.nodes.find((item) => item.id === node.id)?.y ?? 0,
+                          };
+                          return patch({
+                            overrides: { [node.id]: { position: { ...current, [axis]: value } } },
+                          });
+                        }}
+                      />
+                    ))}
+                    {(['width', 'height'] as const).map((key) => (
+                      <NumberField
+                        key={key}
+                        label={key === 'width' ? 'Width' : 'Height'}
+                        min={key === 'width' ? 80 : 40}
+                        value={
+                          resolveNodeStyle(doc, node)[key] ??
+                          scene?.nodes.find((item) => item.id === node.id)?.[key] ??
+                          (key === 'width' ? 180 : 64)
+                        }
+                        onChange={(value) =>
+                          patch({ overrides: { [node.id]: { style: { [key]: value } } } })
+                        }
+                      />
+                    ))}
+                  </div>
+                  {doc.layout.mode === 'grid' && (
+                    <div className="geometry-grid">
+                      {(['column', 'row'] as const).map((axis) => (
+                        <label className="field" key={axis}>
+                          {axis === 'column' ? 'Grid column' : 'Grid row'}
+                          <input
+                            type="number"
+                            min="0"
+                            value={node.placement?.[axis] ?? ''}
+                            onChange={(e) =>
+                              patch({
+                                nodes: [
+                                  {
+                                    id: node.id,
+                                    placement: {
+                                      ...(node.placement ?? { column: 0, row: 0 }),
+                                      [axis]: Number(e.target.value),
+                                    },
+                                  },
+                                ],
+                              })
+                            }
+                          />
+                        </label>
+                      ))}
+                      <button
+                        className="text-button"
+                        onClick={() => patch({ nodes: [{ id: node.id, placement: null }] })}
+                      >
+                        Clear grid cell
+                      </button>
+                    </div>
+                  )}
+                </details>
                 <div className="position-note">
                   <Pin size={14} />
                   <span>
@@ -416,6 +749,22 @@ export function Inspector({
                   value={edge.label ?? ''}
                   onChange={(label) => patch({ edges: [{ id: edge.id, label }] })}
                 />
+                <label className="field role-label">
+                  Role
+                  <select
+                    value={edge.role ?? ''}
+                    onChange={(e) =>
+                      patch({ edges: [{ id: edge.id, role: e.target.value || null }] })
+                    }
+                  >
+                    <option value="">No role</option>
+                    {roleOptions(doc, edge.role).map(({ role, label }) => (
+                      <option key={role} value={role}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 {(['source', 'target'] as const).map((side) => (
                   <div className="endpoint-field" key={side}>
                     <label className="field">
@@ -438,16 +787,6 @@ export function Inspector({
                     </button>
                   </div>
                 ))}
-                <label className="field">
-                  Line style
-                  <select
-                    value={edge.style}
-                    onChange={(e) => patch({ edges: [{ id: edge.id, style: e.target.value }] })}
-                  >
-                    <option value="solid">Solid</option>
-                    <option value="dashed">Dashed</option>
-                  </select>
-                </label>
                 {(['source', 'target'] as const).map((end) => {
                   const nodeId = edge[end];
                   const endpoint = doc.nodes.find((n) => n.id === nodeId);
@@ -594,7 +933,11 @@ export function Inspector({
                 <StyleFields
                   edge
                   style={resolveEdgeStyle(doc, edge)}
+                  property={(key) => resolveEdgeStyleProperty(doc, edge, key)}
                   onChange={(appearance) => patch({ edges: [{ id: edge.id, appearance }] })}
+                  onReset={(key) =>
+                    patch({ edges: [{ id: edge.id, appearance: { [key]: null } }] })
+                  }
                 />
                 <button className="danger-button" onClick={() => onDelete([edge.id])}>
                   <Trash2 size={14} />
@@ -612,6 +955,28 @@ export function Inspector({
                   value={group.label}
                   onChange={(label) => patch({ groups: [{ id: group.id, label }] })}
                 />
+                <TextField
+                  label="Description"
+                  value={group.description ?? ''}
+                  multiline
+                  onChange={(description) => patch({ groups: [{ id: group.id, description }] })}
+                />
+                <label className="field role-label">
+                  Role
+                  <select
+                    value={group.role ?? ''}
+                    onChange={(e) =>
+                      patch({ groups: [{ id: group.id, role: e.target.value || null }] })
+                    }
+                  >
+                    <option value="">No role</option>
+                    {roleOptions(doc, group.role).map(({ role, label }) => (
+                      <option key={role} value={role}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label className="field">
                   Parent group
                   <select
@@ -630,6 +995,13 @@ export function Inspector({
                       ))}
                   </select>
                 </label>
+                <StyleFields
+                  group
+                  style={resolveGroupStyle(doc, group)}
+                  property={(key) => resolveGroupStyleProperty(doc, group, key)}
+                  onChange={(style) => patch({ groups: [{ id: group.id, style }] })}
+                  onReset={(key) => patch({ groups: [{ id: group.id, style: { [key]: null } }] })}
+                />
                 <label className="field">
                   Accent
                   <select
@@ -984,113 +1356,200 @@ function StyleFields({
   style,
   onChange,
   edge = false,
+  group = false,
+  property,
+  onReset,
+  onVariant,
 }: {
   style: ElementStyle;
-  onChange: (style: ElementStyle) => boolean;
+  onChange: (style: Partial<ElementStyle>) => boolean;
   edge?: boolean;
+  group?: boolean;
+  property?: (key: any) => {
+    value: ElementStyle[keyof ElementStyle] | undefined;
+    source?: string;
+    canReset: boolean;
+  };
+  onReset?: (key: keyof ElementStyle, source?: string) => boolean;
+  onVariant?: (variant: 'classic' | 'shape') => boolean;
 }) {
+  const keys: (keyof ElementStyle)[] = edge
+    ? [
+        'stroke',
+        'fill',
+        'text',
+        'strokeWidth',
+        'dash',
+        'opacity',
+        'arrowStart',
+        'arrowEnd',
+        'routing',
+      ]
+    : group
+      ? ['fill', 'stroke', 'text', 'strokeWidth', 'dash', 'radius', 'opacity', 'fontFamily']
+      : [
+          'fill',
+          'stroke',
+          'text',
+          'secondary',
+          'strokeWidth',
+          'dash',
+          'opacity',
+          'radius',
+          'fontFamily',
+          'fontSize',
+          'fontWeight',
+          'padding',
+          'width',
+          'height',
+          'aspectRatio',
+          'align',
+          'verticalAlign',
+        ];
+  const sourceLabel = (key: keyof ElementStyle) => {
+    const source = property?.(key).source;
+    if (source === 'builtin') return 'built-in default';
+    if (source === 'designSystem') return 'design system';
+    if (source === 'role') return 'role';
+    if (source === 'element') return 'element style';
+    if (source === 'override') return 'presentation override';
+    return 'renderer default';
+  };
+  const resetButton = (key: keyof ElementStyle) => {
+    const info = property?.(key);
+    return (
+      info?.canReset && (
+        <button className="text-button" type="button" onClick={() => onReset?.(key, info.source)}>
+          Reset
+        </button>
+      )
+    );
+  };
+  const field = (key: keyof ElementStyle, label: string, control: React.ReactNode) => (
+    <div className="property-control" key={key}>
+      <label className="field">
+        {label}
+        {control}
+      </label>
+      <div className="property-meta">
+        <span>
+          Effective: {String(property?.(key).value ?? style[key] ?? '—')} · {sourceLabel(key)}
+        </span>
+        {resetButton(key)}
+      </div>
+    </div>
+  );
   return (
     <details className="style-fields">
       <summary>Appearance</summary>
       {!edge && (
-        <label className="field">
-          Shape
-          <select
-            value={style.shape ?? 'rect'}
-            onChange={(e) => onChange({ shape: e.target.value as ElementStyle['shape'] })}
-          >
-            {['rect', 'pill', 'diamond', 'ellipse', 'cylinder', 'text'].map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-        </label>
-      )}
-      {(edge ? ['stroke'] : ['fill', 'stroke', 'text']).map((key) => (
-        <TextField
-          key={key}
-          label={key[0].toUpperCase() + key.slice(1)}
-          value={String(style[key as keyof ElementStyle] ?? '')}
-          onChange={(value) => onChange({ [key]: value })}
-        />
-      ))}
-      <label className="field">
-        Outline
-        <select
-          value={style.dash ?? 'solid'}
-          onChange={(e) => onChange({ dash: e.target.value as ElementStyle['dash'] })}
-        >
-          {['solid', 'dashed', 'dotted'].map((s) => (
-            <option key={s}>{s}</option>
-          ))}
-        </select>
-      </label>
-      {!edge && (
         <>
-          <span className="field">
-            Horizontal
-            <span className="segmented thirds">
-              {(['left', 'center', 'right'] as const).map((align) => (
-                <button
-                  key={align}
-                  className={
-                    (style.align ??
-                      (['diamond', 'ellipse', 'pill'].includes(style.shape ?? '')
-                        ? 'center'
-                        : 'left')) === align
-                      ? 'active'
-                      : ''
-                  }
-                  onClick={() => onChange({ align })}
-                >
-                  {align}
-                </button>
+          {field(
+            'shape',
+            'Shape',
+            <select
+              value={style.shape ?? 'rect'}
+              onChange={(e) => {
+                onChange({ shape: e.target.value as ElementStyle['shape'] });
+              }}
+            >
+              {SHAPE_NAMES.map((s) => (
+                <option key={s} value={s}>
+                  {SHAPE_REGISTRY[s].label}
+                </option>
               ))}
-            </span>
-          </span>
-          <span className="field">
-            Vertical
-            <span className="segmented thirds">
-              {(['top', 'middle', 'bottom'] as const).map((verticalAlign) => (
-                <button
-                  key={verticalAlign}
-                  className={(style.verticalAlign ?? 'middle') === verticalAlign ? 'active' : ''}
-                  onClick={() => onChange({ verticalAlign })}
-                >
-                  {verticalAlign}
-                </button>
-              ))}
-            </span>
-          </span>
-          <TextField
-            label="Font family"
-            value={style.fontFamily ?? 'IBM Plex Sans'}
-            onChange={(fontFamily) => onChange({ fontFamily })}
-          />
-          <TextField
-            label="Font size"
-            value={String(style.fontSize ?? 16)}
-            onChange={(value) => onChange({ fontSize: Number(value) })}
-          />
-          <TextField
-            label="Corner radius"
-            value={String(style.radius ?? 10)}
-            onChange={(value) => onChange({ radius: Number(value) })}
-          />
+            </select>,
+          )}
+          {onVariant && (
+            <button className="text-button" onClick={() => onVariant('classic')}>
+              Use classic component
+            </button>
+          )}
         </>
       )}
-      {edge && (
-        <label className="field">
-          End marker
-          <select
-            value={style.arrowEnd ?? 'open'}
-            onChange={(e) => onChange({ arrowEnd: e.target.value as ElementStyle['arrowEnd'] })}
-          >
-            {['none', 'open', 'filled', 'diamond', 'circle'].map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-        </label>
-      )}
+      {keys.map((key) => {
+        const value = property?.(key).value ?? style[key];
+        const label =
+          key === 'arrowStart'
+            ? 'Start marker'
+            : key === 'arrowEnd'
+              ? 'End marker'
+              : key === 'routing'
+                ? 'Routing'
+                : key === 'strokeWidth'
+                  ? 'Stroke width'
+                  : key === 'secondary'
+                    ? 'Secondary text'
+                    : key === 'aspectRatio'
+                      ? 'Aspect ratio'
+                      : key[0].toUpperCase() + key.slice(1);
+        let control: React.ReactNode;
+        if (['fill', 'stroke', 'text', 'secondary'].includes(key))
+          control = (
+            <span className="color-control">
+              <input
+                type="color"
+                aria-label={`${label} picker`}
+                value={
+                  typeof value === 'string' && /^#[\da-f]{6}$/i.test(value) ? value : '#ffffff'
+                }
+                onChange={(e) => onChange({ [key]: e.target.value })}
+              />
+              <PaintValue
+                label={`${label} value`}
+                value={String(value ?? '')}
+                onCommit={(next) => onChange({ [key]: next })}
+              />
+            </span>
+          );
+        else if (
+          [
+            'dash',
+            'arrowStart',
+            'arrowEnd',
+            'routing',
+            'align',
+            'verticalAlign',
+            'fontWeight',
+          ].includes(key)
+        ) {
+          const options: Record<string, string[]> = {
+            dash: ['solid', 'dashed', 'dotted'],
+            arrowStart: ['none', 'open', 'filled', 'diamond', 'circle'],
+            arrowEnd: ['none', 'open', 'filled', 'diamond', 'circle'],
+            routing: ['orthogonal', 'straight'],
+            align: ['left', 'center', 'right'],
+            verticalAlign: ['top', 'middle', 'bottom'],
+            fontWeight: ['400', '600'],
+          };
+          control = (
+            <select
+              value={String(value ?? '')}
+              onChange={(e) =>
+                onChange({ [key]: key === 'fontWeight' ? Number(e.target.value) : e.target.value })
+              }
+            >
+              {options[key].map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
+          );
+        } else if (['fontFamily'].includes(key))
+          control = (
+            <input
+              value={String(value ?? '')}
+              onChange={(e) => onChange({ [key]: e.target.value })}
+            />
+          );
+        else
+          control = (
+            <NumberControl
+              value={value == null ? undefined : Number(value)}
+              onCommit={(next) => onChange({ [key]: next })}
+            />
+          );
+        return field(key, label, control);
+      })}
     </details>
   );
 }

@@ -5,14 +5,37 @@ import { HttpError } from './file-library';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AgentService } from './agent-access';
 import { parseDocument, layoutDiagram, inspectScene, renderSvg } from '../../core/src/index';
+import { DocumentError } from '../../core/src/document';
 
-export function createMcpAdapter(service: Pick<AgentService, 'list' | 'read' | 'write'>) {
-  const server = new McpServer({ name: 'forma', version: '0.5.3' });
+export function createMcpAdapter(
+  service: Pick<AgentService, 'list' | 'read' | 'write' | 'previewPatch' | 'applyPatch'>,
+) {
+  const server = new McpServer({ name: 'forma', version: '0.6.0' });
   const result = async (action: () => Promise<unknown>) => {
     try {
       const value = await action();
       return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
     } catch (e) {
+      if (e instanceof DocumentError)
+        return {
+          isError: true,
+          content: [
+            { type: 'text' as const, text: JSON.stringify({ error: e.message, issues: e.issues }) },
+          ],
+        };
+      if (Array.isArray((e as { issues?: unknown[] }).issues))
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                error: (e as Error).message,
+                issues: (e as { issues: unknown[] }).issues,
+              }),
+            },
+          ],
+        };
       return {
         isError: true,
         content: [
@@ -65,6 +88,34 @@ export function createMcpAdapter(service: Pick<AgentService, 'list' | 'read' | '
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
     (input) => result(() => service.write(input)),
+  );
+  server.registerTool(
+    'forma_preview_patch',
+    {
+      description:
+        'Preview a native semantic patch against the exact revision you read. Returns an ID-addressed diff and candidate without saving.',
+      inputSchema: {
+        path,
+        revision: z.string().regex(/^[a-f0-9]{64}$/),
+        patch: z.record(z.string(), z.unknown()),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    (input) => result(() => service.previewPatch(input)),
+  );
+  server.registerTool(
+    'forma_apply_patch',
+    {
+      description:
+        'Apply a previously reviewed semantic patch against the supplied base revision. Re-read and reconcile on conflict; it never retries over a newer diagram.',
+      inputSchema: {
+        path,
+        revision: z.string().regex(/^[a-f0-9]{64}$/),
+        patch: z.record(z.string(), z.unknown()),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    },
+    (input) => result(() => service.applyPatch(input)),
   );
   server.registerTool(
     'forma_inspect_diagram',

@@ -1,0 +1,140 @@
+:root {
+  --muted: #626b79;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex='-1']:focus-visible {
+  outline: 3px solid #5c48b8;
+  outline-offset: 2px;
+}
+
+button,
+input,
+select,
+textarea {
+  min-height: 24px;
+}
+
+button {
+  min-width: 24px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline-color: #5c48b8;
+}
+
+.help-text,
+.modal > p,
+.position-note,
+.inspector-footer,
+.statusbar > span,
+.empty-outline,
+.field > small,
+.field > .hint,
+.recovery-note,
+.brand-beta,
+.document-breadcrumb > span:first-child,
+.local-badge,
+.saved-status,
+.sidebar-title,
+.current-document small,
+.outline-heading > span:last-child,
+.group-row small,
+.connections-heading,
+.sidebar-bottom > button:not(.template-link),
+.local-first,
+.status-separator,
+.search-field input::placeholder {
+  color: #5f6877;
+}
+
+.recovery-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f6f7f9;
+  color: #253247;
+}
+
+.recovery-card {
+  width: min(100%, 640px);
+  padding: clamp(24px, 5vw, 44px);
+  border: 1px solid #cbd2dc;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 14px 45px #18233718;
+}
+
+.recovery-kicker {
+  margin: 0 0 10px;
+  color: #53429d;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.recovery-card h1 {
+  margin: 0 0 12px;
+  color: #253247;
+  font-size: clamp(24px, 4vw, 34px);
+  line-height: 1.2;
+}
+
+.recovery-card > p,
+.recovery-card pre {
+  color: #4b5565;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.recovery-card details {
+  margin-top: 18px;
+}
+
+.recovery-card summary {
+  min-height: 24px;
+  color: #3e4858;
+  cursor: pointer;
+}
+
+.recovery-card pre {
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.recovery-actions button {
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+.recovery-actions button:disabled {
+  opacity: 0.65;
+}
+
+.recovery-note {
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .recovery-actions {
+    display: grid;
+  }
+}

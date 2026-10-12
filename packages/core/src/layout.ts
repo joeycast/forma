@@ -1,7 +1,13 @@
-import { resolveNodeStyle, resolveEdgeStyle, resolveGroupStyle } from './resolve-style';
+import {
+  resolveNodeStyle,
+  resolveEdgeStyle,
+  resolveGroupStyle,
+  resolveNodeVariant,
+} from './resolve-style';
 import type { ElkNode, ElkExtendedEdge, ELK } from 'elkjs';
 import { fingerprint, parseDocument, type Diagram, type Point } from './document';
-import { nodeText, styledNodeText, textWidth, wrapText } from './text';
+import type { PortSide } from './styles';
+import { classicNodeText, styledNodeText, textWidth, wrapText } from './text';
 import type { Box, Scene, SceneEdge, SceneGroup, SceneNode } from './scene';
 import {
   arriveSide,
@@ -9,8 +15,8 @@ import {
   departSide,
   isOrthogonal,
   overlaps,
-  retargetRoute,
   routeBetween,
+  previewRoute,
   routesCross,
   routeThrough,
   segmentHitsBox,
@@ -18,15 +24,105 @@ import {
   simplify,
 } from './geometry';
 let elkPromise: Promise<ELK> | undefined;
+type ElkFactory = () => Promise<ELK>;
 const groupMinWidth = (label: string) =>
   Math.max(180, Math.ceil(textWidth(label.toUpperCase(), 11, 600) + label.length * 1.2 + 64));
+const recentLayouts = new Map<string, Scene>();
 
-export async function layoutDiagram(input: Diagram): Promise<Scene> {
-  const elk = await (elkPromise ??= import('elkjs/lib/elk.bundled.js').then(
-    (module) => new module.default(),
-  ));
+function geometrySignature(doc: Diagram) {
+  return JSON.stringify({
+    version: doc.version,
+    title: doc.title,
+    description: doc.description,
+    layout: doc.layout,
+    footer: doc.presentation.footer,
+    systemSpacing: doc.presentation.designSystem?.spacing,
+    groups: doc.groups.map((g) => [g.id, g.label, g.parent]),
+    nodes: doc.nodes.map((n) => {
+      const style = resolveNodeStyle(doc, n);
+      return [
+        n.id,
+        n.label,
+        n.description,
+        n.kind,
+        n.group,
+        n.placement,
+        doc.presentation.nodes[n.id]?.position ?? null,
+        n.ports,
+        resolveNodeVariant(doc, n),
+        style.shape,
+        style.aspectRatio,
+        style.width,
+        style.height,
+        style.fontSize,
+        style.fontWeight,
+        style.padding,
+      ];
+    }),
+    edges: doc.edges.map((e) => {
+      const style = resolveEdgeStyle(doc, e);
+      return [
+        e.id,
+        e.source,
+        e.target,
+        e.label,
+        e.path,
+        style.routing,
+        style.sourcePort,
+        style.targetPort,
+        style.sourceIndex,
+        style.targetIndex,
+      ];
+    }),
+  });
+}
+
+function refreshCachedScene(scene: Scene, doc: Diagram): Scene {
+  const groups = new Map(doc.groups.map((g) => [g.id, g]));
+  return {
+    ...scene,
+    document: doc,
+    fingerprint: fingerprint(doc),
+    nodes: scene.nodes.map((node) => {
+      const semantic = doc.nodes.find((n) => n.id === node.id)!;
+      const group = semantic.group ? groups.get(semantic.group) : undefined;
+      return {
+        ...node,
+        semantic,
+        style: resolveNodeStyle(doc, semantic),
+        variant: resolveNodeVariant(doc, semantic),
+        accent:
+          doc.presentation.nodes[node.id]?.color ??
+          (semantic.emphasis === 'primary'
+            ? 'blue'
+            : semantic.group
+              ? group!.color
+              : doc.type === 'flow'
+                ? 'blue'
+                : 'slate'),
+      };
+    }),
+    groups: scene.groups.map((group) => {
+      const semantic = doc.groups.find((g) => g.id === group.id)!;
+      return { ...group, semantic, style: resolveGroupStyle(doc, semantic) };
+    }),
+    edges: scene.edges.map((edge) => {
+      const semantic = doc.edges.find((e) => e.id === edge.id)!;
+      return { ...edge, semantic, style: resolveEdgeStyle(doc, semantic) };
+    }),
+  };
+}
+
+export async function layoutDiagram(input: Diagram, makeElk?: ElkFactory): Promise<Scene> {
   const doc = parseDocument(input),
     compact = doc.layout.spacing === 'compact';
+  const signature = geometrySignature(doc);
+  const cached = recentLayouts.get(signature);
+  if (cached) {
+    recentLayouts.delete(signature);
+    recentLayouts.set(signature, cached);
+    return refreshCachedScene(cached, doc);
+  }
   const system = doc.presentation.designSystem;
   const nodeStyles = new Map(doc.nodes.map((n) => [n.id, resolveNodeStyle(doc, n)]));
   const measured = new Map(
@@ -34,9 +130,9 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
       const style = nodeStyles.get(n.id)!;
       return [
         n.id,
-        Object.keys(style).length
+        resolveNodeVariant(doc, n) === 'shape'
           ? styledNodeText(n.label, n.description, style)
-          : nodeText(n.label, n.description),
+          : classicNodeText(n.label, n.description, style),
       ];
     }),
   );
@@ -62,36 +158,47 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
         height: measured.get(n.id)!.height,
       })),
   ];
-  const graph = await elk.layout({
-    id: '__forma_root__',
-    layoutOptions: {
-      'elk.algorithm': 'layered',
-      'elk.direction': doc.layout.direction,
-      'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
-      'elk.edgeRouting': 'ORTHOGONAL',
-      'elk.spacing.nodeNode': String(system?.spacing?.node ?? (compact ? 32 : 48)),
-      'elk.layered.spacing.nodeNodeBetweenLayers': String(
-        system?.spacing?.layer ?? (compact ? 56 : 88),
-      ),
-      'elk.layered.spacing.edgeNodeBetweenLayers': '28',
-      'elk.spacing.edgeNode': '24',
-      'elk.spacing.edgeEdge': '0',
-      'elk.layered.spacing.edgeEdgeBetweenLayers': '0',
-      'elk.padding': '[top=0,left=0,bottom=0,right=0]',
-      'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
-      'elk.randomSeed': '1',
-      'elk.separateConnectedComponents': 'true',
-    },
-    children: buildChildren(),
-    edges: doc.edges.map((e) => ({
-      id: e.id,
-      sources: [e.source],
-      targets: [e.target],
-      ...(e.label
-        ? { labels: [{ text: e.label, width: textWidth(e.label, 11) + 20, height: 24 }] }
-        : {}),
-    })),
-  });
+  // Grid placement is fully determined by explicit row/column placement below.
+  // Do not even load ELK for this mode: it is a large dependency and contributes
+  // no geometry to the final scene.
+  const graph =
+    doc.layout.mode === 'grid'
+      ? { id: '__forma_root__', children: buildChildren() }
+      : await (async () => {
+          const elk = await (elkPromise ??= makeElk
+            ? makeElk()
+            : import('elkjs/lib/elk.bundled.js').then((module) => new module.default()));
+          return elk.layout({
+            id: '__forma_root__',
+            layoutOptions: {
+              'elk.algorithm': 'layered',
+              'elk.direction': doc.layout.direction,
+              'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
+              'elk.edgeRouting': 'ORTHOGONAL',
+              'elk.spacing.nodeNode': String(system?.spacing?.node ?? (compact ? 32 : 48)),
+              'elk.layered.spacing.nodeNodeBetweenLayers': String(
+                system?.spacing?.layer ?? (compact ? 56 : 88),
+              ),
+              'elk.layered.spacing.edgeNodeBetweenLayers': '28',
+              'elk.spacing.edgeNode': '24',
+              'elk.spacing.edgeEdge': '0',
+              'elk.layered.spacing.edgeEdgeBetweenLayers': '0',
+              'elk.padding': '[top=0,left=0,bottom=0,right=0]',
+              'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+              'elk.randomSeed': '1',
+              'elk.separateConnectedComponents': 'true',
+            },
+            children: buildChildren(),
+            edges: doc.edges.map((e) => ({
+              id: e.id,
+              sources: [e.source],
+              targets: [e.target],
+              ...(e.label
+                ? { labels: [{ text: e.label, width: textWidth(e.label, 11) + 20, height: 24 }] }
+                : {}),
+            })),
+          });
+        })();
   const nodes: SceneNode[] = [],
     groups: SceneGroup[] = [],
     edges: SceneEdge[] = [];
@@ -116,6 +223,7 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
           id: child.id,
           semantic,
           style: nodeStyles.get(child.id),
+          variant: resolveNodeVariant(doc, semantic),
           accent:
             override?.color ??
             (semantic.emphasis === 'primary'
@@ -240,22 +348,123 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
     }
   }
   const down = doc.layout.direction === 'DOWN';
-  const routed: { points: Point[]; custom: boolean; straight: boolean }[] = [];
+  const routed: { points: Point[]; bounds: Box; custom: boolean; straight: boolean }[] = [];
+  // Bound aggregate Dijkstra expansions per composition, not only each edge.
+  // Remaining edges receive deterministic obstacle-aware fallbacks and a
+  // visible inspection diagnostic when the budget is exhausted.
+  const sceneRouteBudget = {
+    // Shared across Dijkstra expansions, cached transition checks, and peer
+    // crossing work. The cap keeps dense scenes bounded while scaling the
+    // ordinary budget with diagram size.
+    remaining: Math.min(3_000_000, Math.max(200_000, nodes.length * doc.edges.length * 200)),
+  };
+  const routeBounds = (route: Point[]): Box => {
+    const xs = route.map((point) => point.x),
+      ys = route.map((point) => point.y);
+    return {
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      width: Math.max(...xs) - Math.min(...xs),
+      height: Math.max(...ys) - Math.min(...ys),
+    };
+  };
+  const boxesOverlap = (a: Box, b: Box) =>
+    a.x <= b.x + b.width && a.x + a.width >= b.x && a.y <= b.y + b.height && a.y + a.height >= b.y;
   const commit = (points: Point[], custom: boolean, straight: boolean) => {
-    routed.push({ points, custom, straight });
+    routed.push({ points, bounds: routeBounds(points), custom, straight });
     return points;
   };
   for (const semantic of doc.edges) {
+    let routingBudgetExceeded = false;
     const edgeStyle = resolveEdgeStyle(doc, semantic);
     const source = allNodes.get(semantic.source)!,
       target = allNodes.get(semantic.target)!;
     const skip = new Set([source.id, target.id]);
-    const blocked = (points: Point[]) =>
-      nodes.some(
+    const blocked = (points: Point[]) => {
+      const bounds = routeBounds(points);
+      return nodes.some(
         (n) =>
-          !skip.has(n.id) && points.some((p, i) => i > 0 && segmentHitsBox(points[i - 1], p, n)),
+          !skip.has(n.id) &&
+          boxesOverlap(bounds, n) &&
+          points.some((p, i) => i > 0 && segmentHitsBox(points[i - 1], p, n)),
       );
-    const peers = () => routed.filter((r) => !r.straight).map((r) => r.points);
+    };
+    const peerRoutes = () => routed.filter((r) => !r.straight);
+    const peers = () => peerRoutes().map((r) => r.points);
+    const nearby = (route: Point[], margin: number) => {
+      const x1 = Math.min(...route.map((p) => p.x)) - margin,
+        x2 = Math.max(...route.map((p) => p.x)) + margin,
+        y1 = Math.min(...route.map((p) => p.y)) - margin,
+        y2 = Math.max(...route.map((p) => p.y)) + margin;
+      return (box: Box) =>
+        box.x <= x2 && box.x + box.width >= x1 && box.y <= y2 && box.y + box.height >= y1;
+    };
+    const routeAutomatically = (
+      fromPoint: Point,
+      toPoint: Point,
+      sourceSide: PortSide,
+      targetSide: PortSide,
+      self = false,
+    ) => {
+      const allPeerRoutes = peerRoutes();
+      const allPeers = allPeerRoutes.map((r) => r.points);
+      const relevant = nearby([fromPoint, toPoint], 80);
+      const localPeers = allPeerRoutes
+        .map((peer, index) => ({ route: peer.points, index, close: relevant(peer.bounds) }))
+        .filter((item) => item.close)
+        .sort((a, b) => a.index - b.index)
+        .slice(-12)
+        .map((item) => item.route);
+      const localNodes = nodes.filter(relevant);
+      const bounded = {
+        maxCoordinates: 36,
+        sourceShape: source.style?.shape,
+        targetShape: target.style?.shape,
+        workBudget: sceneRouteBudget,
+        onBudgetExceeded: () => {
+          routingBudgetExceeded = true;
+        },
+      };
+      const route = routeBetween(
+        source,
+        target,
+        localNodes,
+        down,
+        self,
+        sourceSide,
+        targetSide,
+        from.index,
+        to.index,
+        from.count,
+        to.count,
+        localPeers,
+        bounded,
+      );
+      const routeBox = routeBounds(route);
+      const needsFullSearch =
+        blocked(route) ||
+        allPeerRoutes.some(
+          (peer) => boxesOverlap(routeBox, peer.bounds) && routesCross(route, peer.points),
+        );
+      return needsFullSearch &&
+        (localNodes.length !== nodes.length || localPeers.length !== allPeers.length)
+        ? routeBetween(
+            source,
+            target,
+            nodes,
+            down,
+            self,
+            sourceSide,
+            targetSide,
+            from.index,
+            to.index,
+            from.count,
+            to.count,
+            allPeers,
+            bounded,
+          )
+        : route;
+    };
     const raw = rawMap.get(semantic.id),
       sections = raw?.edge.sections;
     const elkPoints = sections?.length
@@ -285,6 +494,7 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
       sourceSide,
       edgeStyle.sourceIndex,
       sourceSide,
+      source.style?.shape,
     );
     const to = attachmentPoint(
       target,
@@ -292,12 +502,21 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
       targetSide,
       edgeStyle.targetIndex,
       targetSide,
+      target.style?.shape,
     );
     let points: Point[];
     const straight = edgeStyle.routing === 'straight' && source.id !== target.id;
     if (straight) {
       if (semantic.path?.length)
-        points = routeThrough(from.point, semantic.path, to.point, from.side, to.side);
+        points = previewRoute(
+          [],
+          from.point,
+          to.point,
+          from.side,
+          to.side,
+          'straight',
+          semantic.path,
+        );
       else {
         const center = (b: Box) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
         points =
@@ -311,34 +530,20 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
       commit(points, !!semantic.path?.length, true);
     } else if (semantic.path?.length && source.id !== target.id) {
       points = commit(
-        routeThrough(from.point, semantic.path, to.point, from.side, to.side),
+        previewRoute([], from.point, to.point, from.side, to.side, 'orthogonal', semantic.path),
         true,
         false,
       );
     } else if (source.id === target.id) {
       points = commit(
-        routeBetween(
-          source,
-          target,
-          nodes,
-          down,
-          true,
-          from.side,
-          to.side,
-          from.index,
-          to.index,
-          from.count,
-          to.count,
-        ),
+        routeAutomatically(from.point, to.point, from.side, to.side, true),
         false,
         false,
       );
     } else {
       let kept: Point[] | null = null;
       if (elkPoints && doc.layout.mode !== 'grid') {
-        const adjusted =
-          retargetRoute(elkPoints, from.point, to.point, from.side, to.side) ??
-          (explicitSide ? null : elkPoints);
+        const adjusted = previewRoute(elkPoints, from.point, to.point, from.side, to.side);
         if (
           adjusted &&
           isOrthogonal(adjusted) &&
@@ -348,27 +553,19 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
           kept = adjusted;
       }
       points = commit(
-        kept ??
-          routeBetween(
-            source,
-            target,
-            nodes,
-            down,
-            false,
-            from.side,
-            to.side,
-            from.index,
-            to.index,
-            from.count,
-            to.count,
-            peers(),
-          ),
+        kept ?? routeAutomatically(from.point, to.point, from.side, to.side),
         false,
         false,
       );
     }
     const style = edgeStyle;
-    const edge: SceneEdge = { id: semantic.id, semantic, points, style };
+    const edge: SceneEdge = {
+      id: semantic.id,
+      semantic,
+      points,
+      style,
+      ...(routingBudgetExceeded ? { routingBudgetExceeded: true } : {}),
+    };
     if (semantic.label) {
       const lines = wrapText(semantic.label, 156, 11),
         width = Math.max(...lines.map((l) => textWidth(l, 11))) + 16,
@@ -432,7 +629,7 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
   const titleLines = wrapText(doc.title, width - 112, 30, 600),
     descriptionLines = wrapText(doc.description ?? '', width - 112, 13);
   const header = Math.max(128, 48 + titleLines.length * 38 + descriptionLines.length * 19 + 28);
-  return {
+  const scene: Scene = {
     document: doc,
     fingerprint: fingerprint(doc),
     nodes,
@@ -447,4 +644,7 @@ export async function layoutDiagram(input: Diagram): Promise<Scene> {
     titleLines,
     descriptionLines,
   };
+  recentLayouts.set(signature, scene);
+  if (recentLayouts.size > 8) recentLayouts.delete(recentLayouts.keys().next().value!);
+  return scene;
 }

@@ -2,6 +2,8 @@ import { createServer } from 'node:http';
 import { isAbsolute } from 'node:path';
 import { createFileLibrary, HttpError } from './file-library';
 import { json, readBody, serveAsset } from './http';
+import { z } from 'zod';
+import { fileSystemLibrary } from './system-library';
 /** Optional loopback adapter. Hosted mode uses a separate authenticated server. */
 export async function createLocalServer(options: {
   directory: string;
@@ -9,6 +11,7 @@ export async function createLocalServer(options: {
   port?: number;
 }) {
   let library = await createFileLibrary(options.directory),
+    systems = await fileSystemLibrary(options.directory),
     mutations = Promise.resolve();
   const server = createServer(async (req, res) => {
     try {
@@ -24,6 +27,17 @@ export async function createLocalServer(options: {
           json(res, 200, await library.list());
           return;
         }
+        if (req.method === 'GET' && url.pathname === '/api/systems') {
+          json(res, 200, await systems.list());
+          return;
+        }
+        if (req.method === 'GET' && url.pathname === '/api/systems/item') {
+          const input = z
+            .object({ id: z.string().min(1).max(80), revision: z.string().min(1).max(40) })
+            .parse(Object.fromEntries(url.searchParams));
+          json(res, 200, await systems.get(input.id, input.revision));
+          return;
+        }
         if (req.method === 'GET' && url.pathname === '/api/document') {
           json(
             res,
@@ -35,6 +49,27 @@ export async function createLocalServer(options: {
           );
           return;
         }
+        if (req.method === 'DELETE' && url.pathname === '/api/systems') {
+          if (req.headers['x-forma-request'] !== '1')
+            throw new HttpError(403, 'A Forma application request is required.');
+          const input = z
+            .object({
+              id: z.string().min(1).max(80),
+              revision: z.string().min(1).max(40),
+              expectedStorageRevision: z
+                .string()
+                .regex(/^[a-f0-9]{64}$/)
+                .nullable(),
+            })
+            .strict()
+            .parse(await readBody(req));
+          json(
+            res,
+            200,
+            await systems.remove(input.id, input.revision, input.expectedStorageRevision),
+          );
+          return;
+        }
         if (req.method !== 'POST') throw new HttpError(405, 'Unsupported library request.');
         const data = await readBody(req);
         const operation = async () => {
@@ -42,9 +77,72 @@ export async function createLocalServer(options: {
             if (typeof data.directory !== 'string' || !isAbsolute(data.directory))
               throw new HttpError(400, 'Enter an absolute folder path.');
             library = await createFileLibrary(data.directory);
+            systems = await fileSystemLibrary(data.directory);
             return library.list();
           }
+          if (url.pathname === '/api/systems') {
+            if (req.headers['x-forma-request'] !== '1')
+              throw new HttpError(403, 'A Forma application request is required.');
+            const input = z
+              .object({
+                system: z.unknown(),
+                expectedStorageRevision: z
+                  .string()
+                  .regex(/^[a-f0-9]{64}$/)
+                  .nullable(),
+              })
+              .strict()
+              .parse(data);
+            return systems.save(input.system, input.expectedStorageRevision);
+          }
           if (url.pathname === '/api/document') return library.save(data);
+          if (url.pathname === '/api/library/rename')
+            return library.rename(
+              z
+                .object({
+                  from: z.string(),
+                  to: z.string(),
+                  revision: z.string().regex(/^[a-f0-9]{64}$/),
+                  workspace: z.string(),
+                })
+                .strict()
+                .parse(data),
+            );
+          if (url.pathname === '/api/library/duplicate')
+            return library.duplicate(
+              z
+                .object({
+                  from: z.string(),
+                  to: z.string(),
+                  revision: z.string().regex(/^[a-f0-9]{64}$/),
+                  workspace: z.string(),
+                })
+                .strict()
+                .parse(data),
+            );
+          if (url.pathname === '/api/library/trash')
+            return library.trash(
+              z
+                .object({
+                  path: z.string(),
+                  revision: z.string().regex(/^[a-f0-9]{64}$/),
+                  workspace: z.string(),
+                })
+                .strict()
+                .parse(data),
+            );
+          if (url.pathname === '/api/library/restore')
+            return library.restore(
+              z
+                .object({
+                  trashId: z.string(),
+                  revision: z.string().regex(/^[a-f0-9]{64}$/),
+                  to: z.string().optional(),
+                  workspace: z.string(),
+                })
+                .strict()
+                .parse(data),
+            );
           throw new HttpError(404, 'Unknown library operation.');
         };
         const result = mutations.then(operation);

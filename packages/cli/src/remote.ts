@@ -82,11 +82,14 @@ export async function remoteClient(env: NodeJS.ProcessEnv = process.env) {
     } catch {
       throw new Error('The server returned an invalid response.');
     }
-    if (!response.ok)
-      throw new HttpError(
+    if (!response.ok) {
+      const error = new HttpError(
         response.status,
         `Forma HTTP ${response.status}: ${data.error ?? 'Request rejected.'}`,
-      );
+      ) as HttpError & { issues?: unknown };
+      if (Array.isArray(data.issues)) error.issues = data.issues;
+      throw error;
+    }
     return data;
   };
   const service = {
@@ -94,6 +97,8 @@ export async function remoteClient(env: NodeJS.ProcessEnv = process.env) {
     list: () => request('diagrams'),
     read: (path: string) => request('document?path=' + encodeURIComponent(path)),
     write: (data: unknown) => request('document', data),
+    previewPatch: (data: unknown) => request('document/preview', data),
+    applyPatch: (data: unknown) => request('document/apply', data),
   };
   return { origin, service };
 }

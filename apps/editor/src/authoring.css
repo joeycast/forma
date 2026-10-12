@@ -1,0 +1,119 @@
+.shape-palette {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px;
+  color: var(--ink, #252b35);
+}
+.dropdown.authoring-menu {
+  box-sizing: border-box;
+  width: min(320px, calc(100vw - 24px));
+  max-height: min(75vh, calc(100vh - 110px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.shape-palette-title {
+  margin: 0 0 9px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.shape-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.shape-palette-grid button {
+  display: flex;
+  min-width: 0;
+  min-height: 62px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--line, #e4e7ec);
+  border-radius: 7px;
+  background: var(--surface, #fff);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  padding: 6px 4px;
+  text-align: center;
+}
+.shape-palette-grid button:hover,
+.shape-palette-grid button:focus-visible,
+.shape-palette-group:hover,
+.shape-palette-group:focus-visible {
+  border-color: var(--accent, #6c7fe8);
+  background: var(--surface-raised, #f7f8fb);
+  outline: none;
+}
+.shape-palette-group {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.shape-palette p {
+  margin: 8px 1px 1px;
+  color: var(--muted, #697386);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.authoring-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.canvas-onboarding {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  width: min(390px, calc(100% - 40px));
+  flex-direction: column;
+  align-items: center;
+  padding: 24px;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--line, #e4e7ec);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  box-shadow: 0 12px 36px #1b223014;
+  text-align: center;
+}
+.canvas-onboarding-mark {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  background: #f2eff9;
+  color: #7962b5;
+}
+.canvas-onboarding h2 {
+  margin: 14px 0 5px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.canvas-onboarding p {
+  margin: 0 0 16px;
+  color: var(--muted, #697386);
+  font-size: 12px;
+}
+.canvas-onboarding button + button {
+  margin-top: 7px;
+}

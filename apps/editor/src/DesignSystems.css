@@ -1,0 +1,130 @@
+.modal .design-system-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+.design-style-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+.modal .design-system-fields > .field {
+  min-width: 0;
+  margin: 0;
+}
+.modal .design-system-fields > details,
+.modal .design-system-fields > fieldset,
+.modal .design-system-fields > .help-text,
+.modal .design-system-fields > .system-preview {
+  grid-column: 1 / -1;
+}
+.design-spacing {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  border: 1px solid var(--line, #dce1e8);
+  border-radius: 8px;
+  padding: 10px;
+}
+.design-spacing legend {
+  padding: 0 5px;
+  font-size: 11px;
+  color: var(--muted, #64748b);
+}
+.design-role-add {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+.design-role-add input,
+.design-role .field input {
+  min-width: 0;
+}
+.design-role {
+  border-top: 1px solid var(--line, #dce1e8);
+  padding-top: 8px;
+}
+.design-role > button {
+  margin-bottom: 8px;
+}
+.system-preview {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 12px;
+  margin: 8px 0;
+  min-height: 115px;
+  min-width: 0;
+}
+.system-preview-svg {
+  width: 100%;
+  max-height: 360px;
+  overflow: auto;
+}
+.system-preview-svg svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 360px;
+}
+.system-preview > span {
+  font-size: 11px;
+  font-weight: 600;
+}
+.system-preview-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 8px;
+}
+.system-preview-card {
+  display: grid;
+  gap: 4px;
+  border: 1px solid;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.system-preview-card small {
+  font-size: 10px;
+}
+.system-preview-group i {
+  height: 2px;
+  min-width: 22px;
+  flex: 1;
+}
+.modal-actions {
+  flex-wrap: wrap;
+}
+.modal .design-system-fields .color-control {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.modal .design-system-fields .color-control input[type='color'] {
+  flex: 0 0 36px;
+  padding: 2px;
+}
+.modal .design-system-fields .color-control input:not([type='color']) {
+  min-width: 0;
+  flex: 1;
+}
+
+@media (max-width: 760px) {
+  .modal .design-system-fields,
+  .modal .design-system-fields .design-style-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 540px) {
+  .modal .design-system-fields,
+  .modal .design-system-fields .design-style-grid,
+  .modal .design-system-fields .design-spacing {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,8 +1,20 @@
-import { hosted } from './hosting';
 import regularFont from '../../../public/fonts/IBMPlexSans-Regular.ttf?inline';
 import boldFont from '../../../public/fonts/IBMPlexSans-SemiBold.ttf?inline';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { parseDocument, serializeDocument, type Diagram } from '../../../packages/core/src';
+import {
+  activeDraftId,
+  dismissRecoverableDraft,
+  draftTabId,
+  findRecoverableDraft,
+  historyWithRecoveredDocument,
+  linkDraftIdentity,
+  persistDraft,
+  readDrafts,
+  readLegacyDraft,
+  rotateDraftId,
+  type DraftRecord,
+} from './drafts';
 import platform from '../../../examples/platform.forma.json';
 import release from '../../../examples/release.forma.json';
 import architecture from '../../../examples/gallery/architecture.forma.json';
@@ -22,16 +34,37 @@ export const gallery = {
   mindmap: parseDocument(mindmap),
   development: parseDocument(development),
 };
-const KEY = 'forma.document.v1';
-export function useDocument() {
-  const [initial] = useState(() => {
-    try {
-      const saved = hosted ? null : localStorage.getItem(KEY);
-      if (saved) return parseDocument(JSON.parse(saved));
-    } catch {
-      /* Preserve unusable storage until next deliberate edit. */
+export function useDocument(scope = 'local') {
+  const [draftIdentity, setDraftIdentity] = useState(() => `draft:${activeDraftId(scope)}`);
+  const [baseRevision, setBaseRevision] = useState<string | null>(null);
+  const [initial] = useState(() => templates.architecture);
+  const [recovery, setRecovery] = useState<{
+    doc: Diagram;
+    identity: string;
+    revision: string | null;
+    stale: boolean;
+    record?: DraftRecord;
+    legacy?: boolean;
+  } | null>(() => {
+    const identity = `draft:${activeDraftId(scope)}`;
+    for (const candidate of readDrafts(scope, identity)) {
+      try {
+        const recovered = parseDocument(JSON.parse(candidate.document));
+        if (serializeDocument(recovered) !== serializeDocument(initial))
+          return {
+            doc: recovered,
+            identity,
+            revision: candidate.baseRevision,
+            stale: false,
+            record: candidate,
+          };
+      } catch {
+        /* Skip malformed records and try the next saved tab snapshot. */
+      }
     }
-    return templates.architecture;
+    const legacy = scope === 'local' ? readLegacyDraft() : null;
+    if (legacy) return { doc: legacy, identity, revision: null, stale: false, legacy: true };
+    return null;
   });
   const [history, setHistory] = useState({
     revision: 0,
@@ -40,15 +73,60 @@ export function useDocument() {
     future: [] as Diagram[],
   });
   const [saved, setSaved] = useState(true);
+  const [otherTabUpdate, setOtherTabUpdate] = useState(false);
+  const draftsSuspended = useRef(false);
   useEffect(() => {
-    if (history.revision === 0 || hosted) return;
+    if (recovery || draftsSuspended.current) return;
+    const timer = setTimeout(() => {
+      if (draftsSuspended.current) return;
+      const result = persistDraft(scope, draftIdentity, history.current, baseRevision);
+      setSaved(result.saved);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [scope, draftIdentity, baseRevision, history.current, history.revision, recovery]);
+  useEffect(() => {
+    const flush = () => {
+      if (!recovery && !draftsSuspended.current)
+        persistDraft(scope, draftIdentity, history.current, baseRevision);
+    };
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, [scope, draftIdentity, baseRevision, history.current, recovery]);
+  useEffect(() => {
+    let channel: BroadcastChannel | undefined;
     try {
-      localStorage.setItem(KEY, serializeDocument(history.current));
-      setSaved(true);
+      channel = new BroadcastChannel(`forma-drafts:${encodeURIComponent(scope)}`);
+      channel.onmessage = (event) => {
+        if (event.data?.action === 'clear-account') {
+          draftsSuspended.current = true;
+          return;
+        }
+        if (
+          event.data?.identity === draftIdentity &&
+          event.data?.tabId &&
+          event.data.tabId !== draftTabId(scope)
+        )
+          setOtherTabUpdate(true);
+      };
     } catch {
-      setSaved(false);
+      /* The app continues with isolated per-tab storage if channels are unavailable. */
     }
-  }, [history.current, history.revision]);
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key?.startsWith(`forma.draft.v2.${encodeURIComponent(scope)}.`) || !event.newValue)
+        return;
+      try {
+        const record = JSON.parse(event.newValue) as DraftRecord;
+        if (record.identity === draftIdentity) setOtherTabUpdate(true);
+      } catch {
+        /* Ignore malformed cross-tab records. */
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => {
+      channel?.close();
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [scope, draftIdentity]);
   const commit = useCallback((doc: Diagram) => {
     const valid = parseDocument(doc);
     setHistory((h) =>
@@ -90,8 +168,82 @@ export function useDocument() {
       }),
     [],
   );
+  const activate = useCallback(
+    (doc: Diagram, identity: string, revision: string | null) => {
+      persistDraft(scope, draftIdentity, history.current, baseRevision);
+      const candidate = findRecoverableDraft(scope, identity, doc, revision);
+      setHistory({ revision: 0, past: [], current: parseDocument(doc), future: [] });
+      setDraftIdentity(identity);
+      setBaseRevision(revision);
+      setRecovery(
+        candidate
+          ? {
+              doc: candidate.doc,
+              identity,
+              revision: candidate.record.baseRevision,
+              stale: candidate.stale,
+              record: candidate.record,
+            }
+          : null,
+      );
+    },
+    [scope, history.current, draftIdentity, baseRevision],
+  );
+  const setDraftLocation = useCallback(
+    (identity: string, revision: string | null) => {
+      if (draftIdentity.startsWith('library:') && identity.startsWith('library:'))
+        linkDraftIdentity(scope, draftIdentity, identity);
+      setDraftIdentity(identity);
+      setBaseRevision(revision);
+    },
+    [scope, draftIdentity],
+  );
+  const recover = useCallback(() => {
+    if (!recovery) return;
+    if (recovery.legacy) {
+      try {
+        localStorage.setItem('forma.document.v1.migrated', 'recovered');
+      } catch {
+        /* Original remains available. */
+      }
+    }
+    setHistory((h) => historyWithRecoveredDocument(h.current, recovery.doc, h.revision));
+    setRecovery(null);
+  }, [recovery]);
+  const keepOriginal = useCallback(() => {
+    if (recovery?.record) dismissRecoverableDraft(scope, recovery.record);
+    if (recovery?.legacy) {
+      try {
+        localStorage.setItem('forma.document.v1.migrated', 'kept');
+      } catch {
+        /* Keep legacy bytes. */
+      }
+    }
+    setRecovery(null);
+  }, [recovery, scope]);
+  const newDraft = useCallback(
+    (doc: Diagram) => {
+      persistDraft(scope, draftIdentity, history.current, baseRevision);
+      setDraftIdentity(`draft:${rotateDraftId(scope)}`);
+      setBaseRevision(null);
+      setRecovery(null);
+      setHistory({ revision: 1, past: [], current: parseDocument(doc), future: [] });
+    },
+    [scope, history.current, draftIdentity, baseRevision],
+  );
+  const openDraftCopy = useCallback(
+    (doc: Diagram) => {
+      persistDraft(scope, draftIdentity, history.current, baseRevision);
+      setDraftIdentity(`draft:${rotateDraftId(scope)}`);
+      setBaseRevision(null);
+      setRecovery(null);
+      setHistory((h) => historyWithRecoveredDocument(h.current, doc, h.revision));
+    },
+    [scope, history.current, draftIdentity, baseRevision],
+  );
   return {
     doc: history.current,
+    draftIdentity,
     commit,
     replace: (doc: Diagram) =>
       setHistory((h) => ({
@@ -100,11 +252,23 @@ export function useDocument() {
         future: [],
         current: parseDocument(doc),
       })),
+    activate,
+    setDraftLocation,
+    recover,
+    keepOriginal,
+    newDraft,
+    openDraftCopy,
+    recovery,
     undo,
     redo,
     canUndo: !!history.past.length,
     canRedo: !!history.future.length,
     saved,
+    otherTabUpdate,
+    clearOtherTabUpdate: () => setOtherTabUpdate(false),
+    suspendDrafts: () => {
+      draftsSuspended.current = true;
+    },
   };
 }
 export function download(name: string, content: string | Blob, type = 'application/json') {

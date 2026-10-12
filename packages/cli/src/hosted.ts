@@ -8,7 +8,9 @@ import { createFileLibrary, HttpError } from './file-library';
 import { json, readBody, serveAsset } from './http';
 import { googleProvider, type IdentityProvider, type Identity, type LoginAttempt } from './google';
 import { loginCookieSchema, sessionCookieSchema, signCookie, verifyCookie } from './signed-cookie';
-import { blobLibraryFor, type BlobStore, type DiagramLibrary } from './blob-store';
+import { blobLibraryFor, ownerKey, type BlobStore, type DiagramLibrary } from './blob-store';
+import { blobSystemLibrary, fileSystemLibrary } from './system-library';
+import { DocumentError } from '../../core/src/document';
 const token = () => randomBytes(32).toString('base64url');
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const cookies = (req: IncomingMessage) =>
@@ -31,6 +33,8 @@ export type HostedOptions = {
   maxBytes?: number;
   maxFiles?: number;
   maxUsers?: number;
+  maxSystemSnapshots?: number;
+  maxSystemBytes?: number;
   enableMcp?: boolean;
   listen?: boolean;
   /** Signed cookies for serverless hosts. Memory sessions remain the Node default. */
@@ -82,7 +86,9 @@ export async function createHostedServer(options: HostedOptions) {
     throw new Error('Configure at least one allowed Google email or Workspace domain.');
   const maxBytes = options.maxBytes ?? 100_000_000,
     maxFiles = options.maxFiles ?? 1000,
-    maxUsers = options.maxUsers ?? 500;
+    maxUsers = options.maxUsers ?? 500,
+    maxSystemSnapshots = options.maxSystemSnapshots ?? 100,
+    maxSystemBytes = options.maxSystemBytes ?? 10 * 1024 * 1024;
   if (
     !Number.isSafeInteger(maxBytes) ||
     maxBytes < 1 ||
@@ -90,7 +96,11 @@ export async function createHostedServer(options: HostedOptions) {
     maxFiles < 1 ||
     maxFiles > 1000 ||
     !Number.isSafeInteger(maxUsers) ||
-    maxUsers < 1
+    maxUsers < 1 ||
+    !Number.isSafeInteger(maxSystemSnapshots) ||
+    maxSystemSnapshots < 1 ||
+    !Number.isSafeInteger(maxSystemBytes) ||
+    maxSystemBytes < 1
   )
     throw new Error('Invalid storage limits. Max files must be 1–1000.');
   const signed = !!options.sessionSecret;
@@ -122,6 +132,7 @@ export async function createHostedServer(options: HostedOptions) {
     const pending = new Map<string, LoginAttempt & { expires: number }>();
     const sessions = new Map<string, { identity: Identity; expires: number }>();
     const libraries = new Map<string, DiagramLibrary>();
+    const systems = new Map<string, Awaited<ReturnType<typeof fileSystemLibrary>>>();
     let registrations = Promise.resolve();
     const sessionName = development ? 'forma-session' : '__Host-forma-session';
     const stateName = development ? 'forma-state' : '__Host-forma-state';
@@ -186,11 +197,28 @@ export async function createHostedServer(options: HostedOptions) {
       );
       return result;
     };
+    const systemsFor = async (identity: Identity) => {
+      const id = ownerKey(identity);
+      const systemLimits = { snapshots: maxSystemSnapshots, bytes: maxSystemBytes };
+      if (blobStore) return blobSystemLibrary(blobStore, id, systemLimits);
+      const library = await libraryFor(identity);
+      void library;
+      if (!systems.has(id))
+        systems.set(id, await fileSystemLibrary(join(directory, 'users', id), systemLimits));
+      return systems.get(id)!;
+    };
     const tokens = await createTokenStore(
       blobStore
         ? {
-            load: async () => (await blobStore.get('agent-tokens.json'))?.text ?? null,
-            save: async (text) => blobStore.put('agent-tokens.json', text),
+            load: async () => {
+              const value = await blobStore.get('agent-tokens.json');
+              return value ? { text: value.text, version: value.etag } : null;
+            },
+            save: async (text, expectedVersion) => {
+              if (!blobStore.putIfMatch)
+                throw new Error('Blob storage does not support conditional writes.');
+              return blobStore.putIfMatch('agent-tokens.json', text, expectedVersion);
+            },
           }
         : directory,
       now,
@@ -237,6 +265,7 @@ export async function createHostedServer(options: HostedOptions) {
                 ? {
                     name: session.identity.name ?? session.identity.email,
                     email: session.identity.email,
+                    ownerHash: ownerKey(session.identity),
                   }
                 : null,
           });
@@ -323,13 +352,13 @@ export async function createHostedServer(options: HostedOptions) {
         if (url.pathname.startsWith('/api/agent/') || url.pathname === '/mcp') {
           if (url.pathname === '/mcp' && !options.enableMcp)
             throw new HttpError(404, 'MCP is not enabled on this host.');
-          const getGrant = () => {
-            const grant = tokens.authenticate(req.headers.authorization);
+          const getGrant = async () => {
+            const grant = await tokens.authenticate(req.headers.authorization);
             if (!allowed(grant.identity))
               throw new HttpError(403, 'This account is no longer admitted to the workspace.');
             return grant;
           };
-          getGrant();
+          await getGrant();
           const service = createAgentService(getGrant, libraryFor);
           if (url.pathname === '/mcp') {
             if (req.method !== 'POST')
@@ -340,7 +369,7 @@ export async function createHostedServer(options: HostedOptions) {
             return;
           }
           if (req.method === 'GET' && url.pathname === '/api/agent/me') {
-            json(res, 200, service.me());
+            json(res, 200, await service.me());
             return;
           }
           if (req.method === 'GET' && url.pathname === '/api/agent/diagrams') {
@@ -353,6 +382,14 @@ export async function createHostedServer(options: HostedOptions) {
           }
           if (req.method === 'POST' && url.pathname === '/api/agent/document') {
             json(res, 200, await service.write(await readBody(req, false)));
+            return;
+          }
+          if (req.method === 'POST' && url.pathname === '/api/agent/document/preview') {
+            json(res, 200, await service.previewPatch(await readBody(req, false)));
+            return;
+          }
+          if (req.method === 'POST' && url.pathname === '/api/agent/document/apply') {
+            json(res, 200, await service.applyPatch(await readBody(req, false)));
             return;
           }
           throw new HttpError(404, 'Unknown agent operation.');
@@ -379,6 +416,28 @@ export async function createHostedServer(options: HostedOptions) {
               );
               return;
             }
+            if (url.pathname === '/api/systems') {
+              if (req.headers['x-forma-request'] !== '1')
+                throw new HttpError(403, 'A Forma application request is required.');
+              const input = z
+                .object({
+                  system: z.unknown(),
+                  expectedStorageRevision: z
+                    .string()
+                    .regex(/^[a-f0-9]{64}$/)
+                    .nullable(),
+                })
+                .strict()
+                .parse(data);
+              json(
+                res,
+                200,
+                await (
+                  await systemsFor(session.identity)
+                ).save(input.system, input.expectedStorageRevision),
+              );
+              return;
+            }
             if (url.pathname === '/api/logout') {
               if (!signed) sessions.delete(hash(jar[sessionName] ?? ''));
               res.setHeader('Set-Cookie', cookie(sessionName, '', 0));
@@ -389,10 +448,106 @@ export async function createHostedServer(options: HostedOptions) {
               json(res, 200, await (await libraryFor(session.identity)).save(data));
               return;
             }
+            const library = await libraryFor(session.identity);
+            if (url.pathname === '/api/library/rename') {
+              const input = z
+                .object({
+                  from: z.string(),
+                  to: z.string(),
+                  revision: z.string().regex(/^[a-f0-9]{64}$/),
+                  workspace: z.string(),
+                })
+                .strict()
+                .parse(data);
+              json(res, 200, await library.rename(input));
+              return;
+            }
+            if (url.pathname === '/api/library/duplicate') {
+              const input = z
+                .object({
+                  from: z.string(),
+                  to: z.string(),
+                  revision: z.string().regex(/^[a-f0-9]{64}$/),
+                  workspace: z.string(),
+                })
+                .strict()
+                .parse(data);
+              json(res, 200, await library.duplicate(input));
+              return;
+            }
+            if (url.pathname === '/api/library/trash') {
+              const input = z
+                .object({
+                  path: z.string(),
+                  revision: z.string().regex(/^[a-f0-9]{64}$/),
+                  workspace: z.string(),
+                })
+                .strict()
+                .parse(data);
+              json(res, 200, await library.trash(input));
+              return;
+            }
+            if (url.pathname === '/api/library/restore') {
+              const input = z
+                .object({
+                  trashId: z.string(),
+                  revision: z.string().regex(/^[a-f0-9]{64}$/),
+                  to: z.string().optional(),
+                  workspace: z.string(),
+                })
+                .strict()
+                .parse(data);
+              json(res, 200, await library.restore(input));
+              return;
+            }
             throw new HttpError(405, 'This operation is not available in hosted mode.');
           }
+          if (req.method === 'DELETE' && url.pathname === '/api/systems') {
+            if (req.headers.origin !== publicUrl.origin || req.headers['x-forma-request'] !== '1')
+              throw new HttpError(403, 'A same-origin Forma application request is required.');
+            const input = z
+              .object({
+                id: z.string().min(1).max(80),
+                revision: z.string().min(1).max(40),
+                expectedStorageRevision: z
+                  .string()
+                  .regex(/^[a-f0-9]{64}$/)
+                  .nullable(),
+              })
+              .strict()
+              .parse(await readBody(req));
+            json(
+              res,
+              200,
+              await (
+                await systemsFor(session.identity)
+              ).remove(input.id, input.revision, input.expectedStorageRevision),
+            );
+            return;
+          }
           if (req.method === 'GET' && url.pathname === '/api/tokens') {
-            json(res, 200, { tokens: tokens.list(session.identity), mcp: !!options.enableMcp });
+            json(res, 200, {
+              tokens: await tokens.list(session.identity),
+              mcp: !!options.enableMcp,
+            });
+            return;
+          }
+          if (url.pathname === '/api/systems') {
+            const systems = await systemsFor(session.identity);
+            if (req.method === 'GET') {
+              json(res, 200, await systems.list());
+              return;
+            }
+          }
+          if (req.method === 'GET' && url.pathname === '/api/systems/item') {
+            const input = z
+              .object({ id: z.string().min(1).max(80), revision: z.string().min(1).max(40) })
+              .parse(Object.fromEntries(url.searchParams));
+            json(
+              res,
+              200,
+              await (await systemsFor(session.identity)).get(input.id, input.revision),
+            );
             return;
           }
           const library = await libraryFor(session.identity);
@@ -430,15 +585,19 @@ export async function createHostedServer(options: HostedOptions) {
           (req.url?.startsWith('/api/agent/') || req.url?.split('?')[0] === '/mcp')
         )
           res.setHeader('WWW-Authenticate', 'Bearer realm="Forma agents"');
-        const bad = e instanceof SyntaxError || e instanceof ZodError;
+        const bad =
+          e instanceof SyntaxError || e instanceof ZodError || error instanceof DocumentError;
         json(res, e.status ?? (e.code === 'ENOENT' ? 404 : bad ? 400 : 500), {
           error: e.status
             ? e.message
             : e.code === 'ENOENT'
               ? 'Not found.'
-              : bad
-                ? 'Invalid document or request.'
-                : 'The server could not complete the request.',
+              : error instanceof DocumentError
+                ? error.message
+                : bad
+                  ? 'Invalid document or request.'
+                  : 'The server could not complete the request.',
+          ...(error instanceof DocumentError ? { issues: error.issues } : {}),
         });
       }
     };

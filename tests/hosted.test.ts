@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promis
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHostedServer } from '../packages/cli/src/hosted';
+import { atelier } from '../packages/core/src/index';
 import {
   googleProvider,
   type IdentityProvider,
@@ -37,6 +38,100 @@ test('Google authorization uses identity scopes, PKCE, state and nonce', () => {
     assert.equal(url.searchParams.get(key), value);
   assert.equal(url.searchParams.get('scope'), 'openid email profile');
   assert.equal(url.searchParams.has('client_secret'), false);
+});
+
+test('hosted design systems are owner scoped and mutations require the session, origin, and Forma header', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'forma-systems-hosted-')),
+    assets = join(temp, 'assets'),
+    directory = join(temp, 'data');
+  await mkdir(assets);
+  const attempts = new Map<string, LoginAttempt>();
+  const provider: IdentityProvider = {
+    authorize(attempt) {
+      attempts.set(attempt.state, attempt);
+      return `https://accounts.example/?state=${attempt.state}`;
+    },
+    async exchange(code, attempt) {
+      return {
+        sub: code,
+        email: `${code}@example.com`,
+        email_verified: true,
+        nonce: attempt.nonce,
+      };
+    },
+  };
+  const server = await createHostedServer({
+    directory,
+    assets,
+    port: 0,
+    publicUrl: 'http://127.0.0.1:0',
+    allowedEmails: ['one@example.com', 'two@example.com'],
+    provider,
+  });
+  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const cookieFrom = (response: Response) =>
+    response.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; ');
+  const start = async () => {
+    const response = await fetch(base + '/auth/login', { redirect: 'manual' });
+    return {
+      cookie: cookieFrom(response),
+      state: new URL(response.headers.get('location')!).searchParams.get('state')!,
+    };
+  };
+  const login = async (code: string) => {
+    const attempt = await start();
+    const response = await fetch(`${base}/auth/callback?state=${attempt.state}&code=${code}`, {
+      redirect: 'manual',
+      headers: { Cookie: attempt.cookie },
+    });
+    return cookieFrom(response);
+  };
+  const call = (path: string, cookie: string, method = 'GET', body?: unknown, header = true) =>
+    fetch(base + path, {
+      redirect: 'manual',
+      method,
+      headers: {
+        Cookie: cookie,
+        ...(body === undefined
+          ? {}
+          : {
+              Origin: base,
+              'Content-Type': 'application/json',
+              ...(header ? { 'X-Forma-Request': '1' } : {}),
+            }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  try {
+    const one = await login('one'),
+      two = await login('two');
+    const saved = await call('/api/systems', one, 'POST', {
+      system: atelier,
+      expectedStorageRevision: null,
+    });
+    assert.equal(saved.status, 200, await saved.clone().text());
+    const result = await saved.json();
+    assert.equal((await (await call('/api/systems', one)).json()).systems.length, 1);
+    assert.equal((await (await call('/api/systems', two)).json()).systems.length, 0);
+    const item = await call(
+      `/api/systems/item?id=${encodeURIComponent(atelier.id)}&revision=${encodeURIComponent(atelier.revision)}`,
+      one,
+    );
+    assert.equal((await item.json()).system.id, atelier.id);
+    const deleted = await call('/api/systems', one, 'DELETE', {
+      id: atelier.id,
+      revision: atelier.revision,
+      expectedStorageRevision: result.storageRevision,
+    });
+    assert.equal(deleted.status, 200);
+    assert.deepEqual((await deleted.json()).storageRevision, null);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(temp, { recursive: true, force: true });
+  }
 });
 test('hosted libraries: authentication, state binding, isolation, quotas, conflicts, logout and expiry', async () => {
   const temp = await mkdtemp(join(tmpdir(), 'forma-hosted-')),
@@ -429,7 +524,10 @@ test('file adapter checks byte quotas before creating directories and serializes
       }),
       /quota/,
     );
-    assert.deepEqual(await readdir(directory), []);
+    assert.deepEqual(
+      (await readdir(directory)).filter((entry) => !entry.startsWith('.')),
+      [],
+    );
     const library = await createFileLibrary(directory, { bytes: 10000, files: 10 });
     const saved = await library.save({
       path: 'one.forma.json',

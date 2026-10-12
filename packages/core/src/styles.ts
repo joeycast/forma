@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SHAPE_NAMES } from './shapes';
 const paint = z
   .string()
   .regex(/^(#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|none|transparent)$/);
@@ -23,7 +24,8 @@ export const elementStyleSchema = z
     padding: finite(12, 64).optional(),
     width: finite(80, 1200).optional(),
     height: finite(40, 1600).optional(),
-    shape: z.enum(['rect', 'pill', 'diamond', 'ellipse', 'cylinder', 'text']).optional(),
+    aspectRatio: finite(0.1, 10).optional(),
+    shape: z.enum(SHAPE_NAMES).optional(),
     align: z.enum(['left', 'center', 'right']).optional(),
     verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
     arrowStart: z.enum(['none', 'open', 'filled', 'diamond', 'circle']).optional(),
@@ -38,6 +40,138 @@ export const elementStyleSchema = z
 export const portSides = ['top', 'right', 'bottom', 'left'] as const;
 export type PortSide = (typeof portSides)[number];
 export type ElementStyle = z.infer<typeof elementStyleSchema>;
+/** Style subsets accepted by each object kind. Kept structurally compatible with v1 systems. */
+export type NodeStyle = Pick<
+  ElementStyle,
+  | 'fill'
+  | 'stroke'
+  | 'text'
+  | 'secondary'
+  | 'strokeWidth'
+  | 'dash'
+  | 'radius'
+  | 'opacity'
+  | 'fontFamily'
+  | 'fontSize'
+  | 'fontWeight'
+  | 'padding'
+  | 'width'
+  | 'height'
+  | 'aspectRatio'
+  | 'shape'
+  | 'align'
+  | 'verticalAlign'
+>;
+export type EdgeStyle = Pick<
+  ElementStyle,
+  | 'stroke'
+  | 'text'
+  | 'fill'
+  | 'strokeWidth'
+  | 'dash'
+  | 'opacity'
+  | 'arrowStart'
+  | 'arrowEnd'
+  | 'sourcePort'
+  | 'targetPort'
+  | 'sourceIndex'
+  | 'targetIndex'
+  | 'routing'
+>;
+export type GroupStyle = Pick<
+  ElementStyle,
+  'fill' | 'stroke' | 'text' | 'strokeWidth' | 'dash' | 'radius' | 'opacity' | 'fontFamily'
+>;
+export type NodeStyleProperty = keyof NodeStyle;
+export type EdgeStyleProperty = keyof EdgeStyle;
+export type GroupStyleProperty = keyof GroupStyle;
+
+/** Shared metadata for controls, diagnostics, and effective-style inspection. */
+export const STYLE_CAPABILITIES = {
+  fill: { type: 'paint', group: 'color', appliesTo: ['node', 'edge', 'group'] },
+  stroke: { type: 'paint', group: 'color', appliesTo: ['node', 'edge', 'group'] },
+  text: { type: 'paint', group: 'color', appliesTo: ['node', 'edge', 'group'] },
+  secondary: { type: 'paint', group: 'color', appliesTo: ['node'] },
+  strokeWidth: {
+    type: 'number',
+    group: 'border',
+    min: 0,
+    max: 12,
+    appliesTo: ['node', 'edge', 'group'],
+  },
+  dash: {
+    type: 'enum',
+    group: 'border',
+    values: ['solid', 'dashed', 'dotted'],
+    appliesTo: ['node', 'edge', 'group'],
+  },
+  radius: { type: 'number', group: 'border', min: 0, max: 100, appliesTo: ['node', 'group'] },
+  opacity: {
+    type: 'number',
+    group: 'color',
+    min: 0.1,
+    max: 1,
+    appliesTo: ['node', 'edge', 'group'],
+  },
+  fontFamily: { type: 'string', group: 'typography', appliesTo: ['node', 'group'] },
+  fontSize: { type: 'number', group: 'typography', min: 10, max: 40, appliesTo: ['node'] },
+  fontWeight: { type: 'enum', group: 'typography', values: [400, 600], appliesTo: ['node'] },
+  padding: { type: 'number', group: 'geometry', min: 12, max: 64, appliesTo: ['node'] },
+  width: { type: 'number', group: 'geometry', min: 80, max: 1200, appliesTo: ['node'] },
+  height: { type: 'number', group: 'geometry', min: 40, max: 1600, appliesTo: ['node'] },
+  aspectRatio: { type: 'number', group: 'geometry', min: 0.1, max: 10, appliesTo: ['node'] },
+  shape: {
+    type: 'enum',
+    group: 'geometry',
+    values: SHAPE_NAMES,
+    appliesTo: ['node'],
+  },
+  align: {
+    type: 'enum',
+    group: 'typography',
+    values: ['left', 'center', 'right'],
+    appliesTo: ['node'],
+  },
+  verticalAlign: {
+    type: 'enum',
+    group: 'typography',
+    values: ['top', 'middle', 'bottom'],
+    appliesTo: ['node'],
+  },
+  arrowStart: {
+    type: 'enum',
+    group: 'connection',
+    values: ['none', 'open', 'filled', 'diamond', 'circle'],
+    appliesTo: ['edge'],
+  },
+  arrowEnd: {
+    type: 'enum',
+    group: 'connection',
+    values: ['none', 'open', 'filled', 'diamond', 'circle'],
+    appliesTo: ['edge'],
+  },
+  sourcePort: {
+    type: 'enum',
+    group: 'connection',
+    values: ['top', 'right', 'bottom', 'left'],
+    appliesTo: ['edge'],
+  },
+  targetPort: {
+    type: 'enum',
+    group: 'connection',
+    values: ['top', 'right', 'bottom', 'left'],
+    appliesTo: ['edge'],
+  },
+  sourceIndex: { type: 'number', group: 'connection', min: 0, max: 11, appliesTo: ['edge'] },
+  targetIndex: { type: 'number', group: 'connection', min: 0, max: 11, appliesTo: ['edge'] },
+  routing: {
+    type: 'enum',
+    group: 'connection',
+    values: ['orthogonal', 'straight'],
+    appliesTo: ['edge'],
+  },
+} as const;
+export type StyleProperty = keyof typeof STYLE_CAPABILITIES;
 export const designSystemSchema = z
   .object({
     version: z.literal(1),

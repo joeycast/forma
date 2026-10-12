@@ -1,0 +1,176 @@
+{
+  "benchmark": "F6 final serial layered forward graph matrix",
+  "timeoutMsPerProcess": 65000,
+  "concurrency": 1,
+  "fixture": {
+    "mode": "layered",
+    "direction": "RIGHT",
+    "edgeGeneration": "deterministic forward-only pairs ordered by increasing distance, truncated to requested edge count",
+    "nodeLabel": "Step {index}",
+    "nodeDescription": "Synthetic forward graph node",
+    "styledNode": "n0 uses explicit shape variant, rect shape, white fill",
+    "sizes": [
+      [20, 54],
+      [50, 144],
+      [100, 300]
+    ]
+  },
+  "cold": [
+    {
+      "nodes": 20,
+      "edges": 54,
+      "layoutMs": 3926,
+      "elkMs": 2575,
+      "nonElkMs": 1350,
+      "inspectMs": 266,
+      "retainedNodes": 20,
+      "retainedEdges": 54,
+      "errors": 0,
+      "warnings": 32,
+      "crossings": 11,
+      "routingFallbacks": 21,
+      "diagnosticCodes": {
+        "routing-budget-fallback": 21,
+        "edge-crossing": 11
+      },
+      "workerComputeMs": 4192
+    },
+    {
+      "nodes": 50,
+      "edges": 144,
+      "layoutMs": 3459,
+      "elkMs": 1790,
+      "nonElkMs": 1670,
+      "inspectMs": 209,
+      "retainedNodes": 50,
+      "retainedEdges": 144,
+      "errors": 0,
+      "warnings": 97,
+      "crossings": 50,
+      "routingFallbacks": 47,
+      "diagnosticCodes": {
+        "routing-budget-fallback": 47,
+        "edge-crossing": 50
+      },
+      "workerComputeMs": 3668
+    },
+    {
+      "nodes": 100,
+      "edges": 300,
+      "layoutMs": 10432,
+      "elkMs": 3243,
+      "nonElkMs": 7189,
+      "inspectMs": 2198,
+      "retainedNodes": 100,
+      "retainedEdges": 300,
+      "errors": 0,
+      "warnings": 215,
+      "crossings": 118,
+      "routingFallbacks": 97,
+      "diagnosticCodes": {
+        "routing-budget-fallback": 97,
+        "edge-crossing": 118
+      },
+      "workerComputeMs": 12630
+    }
+  ],
+  "warm20": [
+    {
+      "edit": "cosmetic fill change on explicitly shape-variant node",
+      "layoutMs": 31,
+      "elkMs": 0,
+      "nonElkMs": 31,
+      "inspectMs": 2,
+      "retainedNodes": 20,
+      "retainedEdges": 54,
+      "errors": 0,
+      "warnings": 32,
+      "crossings": 11,
+      "routingFallbacks": 21,
+      "diagnosticCodes": {
+        "routing-budget-fallback": 21,
+        "edge-crossing": 11
+      },
+      "workerComputeMs": 33
+    },
+    {
+      "edit": "node n0 label changed to include expanded",
+      "layoutMs": 2443,
+      "elkMs": 1494,
+      "nonElkMs": 949,
+      "inspectMs": 125,
+      "retainedNodes": 20,
+      "retainedEdges": 54,
+      "errors": 0,
+      "warnings": 32,
+      "crossings": 11,
+      "routingFallbacks": 21,
+      "diagnosticCodes": {
+        "routing-budget-fallback": 21,
+        "edge-crossing": 11
+      },
+      "workerComputeMs": 2568
+    }
+  ],
+  "browserPreview": {
+    "url": "http://127.0.0.1:4173/",
+    "reactFlowNodes": 10,
+    "diagramComponents": 6,
+    "groups": 4,
+    "edges": 6,
+    "outerWorker": "/assets/layout.worker-CkqbxEzx.js",
+    "nestedElkWorker": "/assets/elk-worker.min-C9JGDOE-.js",
+    "failedRequests": 0,
+    "pageExceptions": 0,
+    "genericConsole404": true,
+    "timing": "Verified before inspection was added to the worker reply; final build/browser pipeline must recheck the payload."
+  },
+  "notes": [
+    "Every case retained the requested node and edge counts.",
+    "No edge-node collision, detached connector, or other error was reported in these fixtures.",
+    "Crossing and routing-budget fallback warnings are preserved; the counts are not suppressed.",
+    "The 100-node case completes under the 60-second client timeout on this fixture, but dense-scene warning quality remains a limitation.",
+    "Worker compute time is layout plus inspection; it excludes worker startup, message serialization, and reply delivery."
+  ],
+  "preOptimizationReference": {
+    "fixtureNote": "Earlier measurements used the same layered forward graph sizes but all-classic nodes; final measurements add one explicit shape-variant node, so comparisons are close rather than strict same-scene deltas.",
+    "cold": [
+      {
+        "nodes": 20,
+        "edges": 54,
+        "layoutMs": 3461,
+        "elkMs": 1250,
+        "nonElkMs": 2211,
+        "inspectMs": 29,
+        "errors": 0,
+        "warnings": 31,
+        "crossings": 9,
+        "routingFallbacks": 22
+      },
+      {
+        "nodes": 50,
+        "edges": 144,
+        "layoutMs": 14210,
+        "elkMs": 1149,
+        "nonElkMs": 13061,
+        "inspectMs": 212,
+        "errors": 0,
+        "warnings": 91,
+        "crossings": 29,
+        "routingFallbacks": 62
+      },
+      {
+        "nodes": 100,
+        "edges": 300,
+        "layoutMs": 80438,
+        "elkMs": 2128,
+        "nonElkMs": 78310,
+        "inspectMs": 730,
+        "errors": 0,
+        "warnings": 196,
+        "crossings": 62,
+        "routingFallbacks": 134
+      }
+    ]
+  }
+}

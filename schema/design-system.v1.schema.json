@@ -141,6 +141,11 @@
           "minimum": 40,
           "maximum": 1600
         },
+        "aspectRatio": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 10
+        },
         "shape": {
           "type": "string",
           "enum": [
@@ -149,7 +154,13 @@
             "diamond",
             "ellipse",
             "cylinder",
-            "text"
+            "text",
+            "triangle",
+            "hexagon",
+            "parallelogram",
+            "trapezoid",
+            "document",
+            "cloud"
           ]
         },
         "align": {
@@ -304,6 +315,11 @@
           "minimum": 40,
           "maximum": 1600
         },
+        "aspectRatio": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 10
+        },
         "shape": {
           "type": "string",
           "enum": [
@@ -312,7 +328,13 @@
             "diamond",
             "ellipse",
             "cylinder",
-            "text"
+            "text",
+            "triangle",
+            "hexagon",
+            "parallelogram",
+            "trapezoid",
+            "document",
+            "cloud"
           ]
         },
         "align": {
@@ -467,6 +489,11 @@
           "minimum": 40,
           "maximum": 1600
         },
+        "aspectRatio": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 10
+        },
         "shape": {
           "type": "string",
           "enum": [
@@ -475,7 +502,13 @@
             "diamond",
             "ellipse",
             "cylinder",
-            "text"
+            "text",
+            "triangle",
+            "hexagon",
+            "parallelogram",
+            "trapezoid",
+            "document",
+            "cloud"
           ]
         },
         "align": {
@@ -637,6 +670,11 @@
             "minimum": 40,
             "maximum": 1600
           },
+          "aspectRatio": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 10
+          },
           "shape": {
             "type": "string",
             "enum": [
@@ -645,7 +683,13 @@
               "diamond",
               "ellipse",
               "cylinder",
-              "text"
+              "text",
+              "triangle",
+              "hexagon",
+              "parallelogram",
+              "trapezoid",
+              "document",
+              "cloud"
             ]
           },
           "align": {

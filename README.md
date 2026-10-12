@@ -2,6 +2,8 @@
 
 Professional diagrams, shared by people and agents.
 
+The current version is **0.6.0**. See the [0.6.0 release notes](docs/releases/0.6.0.md) for changes, qualification, and one-command tarball testing. npm publication is pending.
+
 Forma is an open-source, local-first diagramming tool. Describe components, relationships, groups, and emphasis in a versioned JSON document; Forma composes the diagram. Open that same document in the graphical editor, move a component or change its appearance, then let an agent update its meaning without discarding your adjustments.
 
 The engine uses general nodes, shapes, groups, relationships, and content-sized composition grids. Conventional diagram types live in agent skills; no category is required. Versioned organizational design systems control geometry, typography, connectors, spacing, and visual roles, with element-level and human overrides. ELK supplies layered layout, React Flow supplies editor interactions, and a shared composition/SVG layer keeps both interfaces consistent.

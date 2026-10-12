@@ -2,8 +2,9 @@ import { AgentAccess } from './AgentAccess';
 import { hosted } from './hosting';
 import type { Account } from './AuthGate';
 import { useLibrary, LibraryDialog } from './library';
+import { listUnnamedDraftSnapshots } from './drafts';
 import { DesignSystems } from './DesignSystems';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowUpRight,
   ChevronDown,
@@ -36,15 +37,15 @@ import {
   Check,
   FolderPlus,
   SlidersHorizontal,
+  Shapes,
 } from 'lucide-react';
 import { type Connection } from '@xyflow/react';
 import {
-  layoutDiagram,
   parseDocument,
+  fingerprint,
   patchDocument,
   renderSvg,
   serializeDocument,
-  inspectScene,
   alignNodes,
   distributeNodes,
   nudgeNodes,
@@ -52,12 +53,23 @@ import {
   type DistributeAxis,
   type Patch,
   type Scene,
+  type Diagram,
   type DiagramNode,
 } from '../../../packages/core/src';
+import { LayoutClient } from '../../../packages/core/src/layout-client';
 import { Canvas } from './Canvas';
 import { Inspector } from './Inspector';
 import { Dialogs } from './Dialogs';
+import { ShapePalette, type PaletteShape } from './ShapePalette';
+import {
+  copySelection,
+  groupSelection,
+  pasteSelection,
+  ungroupSelection,
+  type ClipboardSelection,
+} from './authoring-commands';
 import { download, localFont, pngFromSvg, slug, useDocument } from './storage';
+import { clearDraftScope, libraryDraftIdentity } from './drafts';
 const kindIcons = {
   service: Server,
   database: Database,
@@ -67,23 +79,109 @@ const kindIcons = {
   process: Zap,
   decision: GitBranch,
 };
-export function App({ account }: { account?: Account }) {
-  const { doc, commit, replace, undo, redo, canUndo, canRedo, saved } = useDocument();
+const idFactoryFor = (doc: Diagram) => {
+  const used = new Set([...doc.nodes, ...doc.edges, ...doc.groups].map((item) => item.id));
+  return (prefix: string) => {
+    let id = `${prefix}-1`,
+      index = 1;
+    while (used.has(id)) id = `${prefix}-${++index}`;
+    used.add(id);
+    return id;
+  };
+};
+export function App(props: { account?: Account; onValidDocument?: (doc: Diagram) => void }) {
+  return <Editor key={hosted ? (props.account?.ownerHash ?? 'signed-out') : 'local'} {...props} />;
+}
+
+function Editor({
+  account,
+  onValidDocument,
+}: {
+  account?: Account;
+  onValidDocument?: (doc: Diagram) => void;
+}) {
   const library = useLibrary();
+  const initialLibraryPath = useRef(library.active?.path ?? null);
+  const restoredInitialFile = useRef(false);
+  const dialogReturnFocus = useRef<HTMLElement | null>(null);
+  const draftScope = hosted ? `account:${account?.ownerHash ?? 'signed-out'}` : 'local';
+  const {
+    doc,
+    draftIdentity,
+    commit,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    saved,
+    activate,
+    newDraft,
+    openDraftCopy,
+    recovery,
+    recover,
+    keepOriginal,
+    setDraftLocation,
+    otherTabUpdate,
+    clearOtherTabUpdate,
+    suspendDrafts,
+  } = useDocument(draftScope);
+  useEffect(() => {
+    onValidDocument?.(doc);
+  }, [doc, onValidDocument]);
+  useEffect(() => {
+    if (library.active)
+      setDraftLocation(
+        libraryDraftIdentity(library.active.workspace, library.active.path),
+        library.active.revision,
+      );
+  }, [library.active?.path, library.active?.revision, library.active?.workspace, setDraftLocation]);
+  useEffect(() => {
+    if (
+      !initialLibraryPath.current ||
+      restoredInitialFile.current ||
+      library.active?.path !== initialLibraryPath.current ||
+      !library.info
+    )
+      return;
+    restoredInitialFile.current = true;
+    void library
+      .readDocument(initialLibraryPath.current)
+      .then(({ doc: savedDoc, file }) => {
+        activate(savedDoc, libraryDraftIdentity(file.workspace, file.path), file.revision);
+      })
+      .catch(() => library.detach());
+  }, [
+    library.active?.path,
+    library.active?.revision,
+    library.info,
+    library.readDocument,
+    library.detach,
+    activate,
+  ]);
   const [scene, setScene] = useState<Scene | null>(null),
     [busy, setBusy] = useState(true),
     [layoutError, setLayoutError] = useState('');
+  const currentFingerprint = useMemo(() => fingerprint(doc), [doc]);
   const [selected, setSelected] = useState<string[]>([]),
     [inspectorTab, setInspectorTab] = useState('design');
   const [modal, setModal] = useState(hosted ? 'library' : ''),
     [menu, setMenu] = useState(''),
     [toast, setToast] = useState(''),
     [search, setSearch] = useState('');
+  useEffect(() => {
+    if (recovery) setModal('recovery');
+    else if (modal === 'recovery') setModal('');
+  }, [recovery]);
   const [fitKey, setFitKey] = useState(0),
     [grid, setGrid] = useState(true),
     [outline, setOutline] = useState(true),
     [showEdges, setShowEdges] = useState(false);
   const [mobileInspector, setMobileInspector] = useState(false);
+  const [viewportCenter, setViewportCenter] = useState<{ x: number; y: number } | null>(null);
+  const clipboard = useRef<ClipboardSelection | null>(null);
+  const layoutClient = useRef<LayoutClient | null>(null);
+  layoutClient.current ??= new LayoutClient();
+  useEffect(() => () => layoutClient.current?.dispose(), []);
   const signingOut = useRef(false);
   const unsavedHosted = hosted && canUndo && library.dirty(doc);
   useEffect(() => {
@@ -102,8 +200,14 @@ export function App({ account }: { account?: Account }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const fileInput = useRef<HTMLInputElement>(null),
     firstLayout = useRef(true),
-    exportBusy = useRef(false);
+    exportBusy = useRef(false),
+    layoutRequest = useRef(0);
   const notify = useCallback((message: string) => setToast(message), []);
+  useEffect(() => {
+    if (!otherTabUpdate) return;
+    notify('Another tab updated this draft. Both tab snapshots are kept separately.');
+    clearOtherTabUpdate();
+  }, [otherTabUpdate, clearOtherTabUpdate, notify]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(''), 5200);
@@ -111,11 +215,13 @@ export function App({ account }: { account?: Account }) {
   }, [toast]);
   useEffect(() => {
     let stale = false;
+    const request = ++layoutRequest.current;
     setBusy(true);
     setLayoutError('');
-    layoutDiagram(doc)
+    layoutClient
+      .current!.layout(doc)
       .then((result) => {
-        if (stale) return;
+        if (stale || request !== layoutRequest.current) return;
         setScene(result);
         setBusy(false);
         if (firstLayout.current) {
@@ -124,12 +230,13 @@ export function App({ account }: { account?: Account }) {
         }
       })
       .catch((error) => {
-        if (stale) return;
+        if (stale || request !== layoutRequest.current) return;
         setLayoutError(error.message);
         setBusy(false);
       });
     return () => {
       stale = true;
+      if (layoutRequest.current === request) layoutClient.current?.cancel();
     };
   }, [doc]);
   const patch = useCallback(
@@ -246,6 +353,67 @@ export function App({ account }: { account?: Account }) {
     },
     [doc, patch],
   );
+  const insertShape = (option: PaletteShape) => {
+    const { shape } = option;
+    const id = uniqueId('shape');
+    const group = doc.groups.some((item) => item.id === selected[0]) ? selected[0] : undefined;
+    const center = viewportCenter
+      ? { x: Math.round(viewportCenter.x - 72), y: Math.round(viewportCenter.y - 40) }
+      : { x: 0, y: 0 };
+    const label = `New ${option.label.toLowerCase()}`;
+    patch({
+      nodes: [{ id, kind: 'shape', label, ...(group ? { group } : {}) }],
+      overrides: {
+        [id]: {
+          position: center,
+          variant: 'shape',
+          style: { shape, ...(option.aspectRatio ? { aspectRatio: option.aspectRatio } : {}) },
+        },
+      },
+    });
+    select(id);
+    setMenu('');
+  };
+  const pastePayload = (payload: ClipboardSelection) => {
+    try {
+      const result = pasteSelection(doc, payload, idFactoryFor(doc), { x: 32, y: 32 });
+      if (!result.ids.length) {
+        notify('Copy a node or group to paste it with its connections.');
+        return;
+      }
+      commit(result.doc);
+      setSelected(result.ids.filter((id) => result.doc.nodes.some((node) => node.id === id)));
+    } catch (error) {
+      notify(
+        error instanceof Error
+          ? `Could not paste: ${error.message}`
+          : 'Could not paste this selection.',
+      );
+    }
+  };
+  const duplicate = (ids: string[]) => {
+    if (!ids.length) return;
+    const positions = Object.fromEntries(
+      (scene?.nodes ?? []).map((node) => [node.id, { x: node.x, y: node.y }]),
+    );
+    const payload = copySelection(doc, ids, positions);
+    pastePayload(payload);
+  };
+  const groupSelected = () => {
+    const result = groupSelection(doc, selected, idFactoryFor(doc));
+    if (result.groupId) {
+      commit(result.doc);
+      setSelected([result.groupId]);
+      setMenu('');
+    }
+  };
+  const ungroupSelected = () => {
+    const next = ungroupSelection(doc, selected);
+    if (next !== doc) {
+      commit(next);
+      setSelected([]);
+    }
+  };
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       const editing =
@@ -256,6 +424,50 @@ export function App({ account }: { account?: Account }) {
         event.preventDefault();
         if (event.target instanceof HTMLElement) event.target.blur();
         requestAnimationFrame(save);
+      }
+      if (
+        !editing &&
+        !modal &&
+        selected.length &&
+        (event.metaKey || event.ctrlKey) &&
+        event.key.toLowerCase() === 'd'
+      ) {
+        event.preventDefault();
+        duplicate(selected);
+      }
+      if (
+        !editing &&
+        !modal &&
+        selected.length &&
+        (event.metaKey || event.ctrlKey) &&
+        event.key.toLowerCase() === 'c'
+      ) {
+        event.preventDefault();
+        if (
+          !selected.some(
+            (id) =>
+              doc.nodes.some((node) => node.id === id) ||
+              doc.groups.some((group) => group.id === id),
+          )
+        ) {
+          clipboard.current = null;
+          notify('Copy a node or group to include its connected relationships.');
+          return;
+        }
+        const positions = Object.fromEntries(
+          (scene?.nodes ?? []).map((node) => [node.id, { x: node.x, y: node.y }]),
+        );
+        clipboard.current = copySelection(doc, selected, positions);
+      }
+      if (
+        !editing &&
+        !modal &&
+        (event.metaKey || event.ctrlKey) &&
+        event.key.toLowerCase() === 'v' &&
+        clipboard.current
+      ) {
+        event.preventDefault();
+        pastePayload(clipboard.current);
       }
       if (!editing && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault();
@@ -295,7 +507,21 @@ export function App({ account }: { account?: Account }) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [save, undo, redo, selected, remove, modal, scene, pinPositions]);
+  }, [
+    save,
+    undo,
+    redo,
+    selected,
+    remove,
+    modal,
+    scene,
+    pinPositions,
+    doc,
+    commit,
+    duplicate,
+    pastePayload,
+    notify,
+  ]);
   const uniqueId = (prefix: string) => {
     const ids = new Set([...doc.nodes, ...doc.edges, ...doc.groups].map((n) => n.id));
     let count = 1;
@@ -366,7 +592,21 @@ export function App({ account }: { account?: Account }) {
     [patch],
   );
   const exportDiagram = async (format: 'svg' | 'png') => {
-    if (exportBusy.current || busy || !scene) return;
+    if (exportBusy.current) return;
+    if (busy) {
+      notify('Wait for layout to finish before exporting an image.');
+      return;
+    }
+    if (!scene) {
+      notify('There is no completed layout to export yet.');
+      return;
+    }
+    if (scene.fingerprint !== currentFingerprint) {
+      setMenu('');
+      notify('This is the last successful preview. Refreshing layout before image export.');
+      void recompose();
+      return;
+    }
     exportBusy.current = true;
     setMenu('');
     notify(`Preparing ${format.toUpperCase()}…`);
@@ -389,10 +629,14 @@ export function App({ account }: { account?: Account }) {
   };
   const recompose = async () => {
     if (busy) return;
+    const request = ++layoutRequest.current;
     setBusy(true);
+    setLayoutError('');
     try {
-      const result = await layoutDiagram(doc);
+      const result = await layoutClient.current!.layout(doc);
+      if (request !== layoutRequest.current) return;
       setScene(result);
+      setLayoutError('');
       setFitKey((k) => k + 1);
       notify(
         Object.values(doc.presentation.nodes).some((n) => n.position)
@@ -400,12 +644,40 @@ export function App({ account }: { account?: Account }) {
           : 'Layout composed with balanced spacing and routing.',
       );
     } catch (error) {
+      if (request !== layoutRequest.current) return;
+      setLayoutError(error instanceof Error ? error.message : String(error));
       notify(String(error));
     } finally {
-      setBusy(false);
+      if (request === layoutRequest.current) setBusy(false);
     }
   };
-  const quality = scene ? inspectScene(scene) : null;
+  const quality =
+    scene && layoutClient.current?.lastGoodInspectionFingerprint === scene.fingerprint
+      ? (layoutClient.current.lastGoodInspection ?? null)
+      : null;
+  const staleScene = !!scene && scene.fingerprint !== currentFingerprint;
+  const inspectionState = layoutError
+    ? 'failed'
+    : staleScene && quality
+      ? 'stale'
+      : busy
+        ? 'pending'
+        : staleScene
+          ? 'stale'
+          : quality
+            ? 'ready'
+            : 'unavailable';
+  const qualityStatus = busy
+    ? 'Checking layout'
+    : layoutError
+      ? 'Latest layout failed'
+      : staleScene
+        ? 'Previous preview checks'
+        : !quality
+          ? 'Checks unavailable'
+          : quality.issues.length
+            ? `${quality.issues.length} layout suggestions`
+            : 'All checks passed';
   const matches = (label: string) => label.toLowerCase().includes(search.toLowerCase());
   const renderNode = (n: DiagramNode, indented = false) => {
     const Icon = kindIcons[n.kind as keyof typeof kindIcons] ?? kindIcons.service;
@@ -716,7 +988,18 @@ export function App({ account }: { account?: Account }) {
                   <ChevronDown size={12} />
                 </button>
                 {menu === 'add' && (
-                  <div className="dropdown add-menu">
+                  <div className="dropdown add-menu authoring-menu">
+                    <ShapePalette
+                      onInsert={insertShape}
+                      onGroup={() =>
+                        selected.some((id) => doc.nodes.some((node) => node.id === id)) ||
+                        selected.some((id) => doc.groups.some((group) => group.id === id))
+                          ? groupSelected()
+                          : addGroup()
+                      }
+                    />
+                    <div className="dropdown-divider" />
+                    <div className="dropdown-title">Semantic components</div>
                     {Object.entries(kindIcons).map(([kind, Icon]) => (
                       <button key={kind} onClick={() => addNode(kind as DiagramNode['kind'])}>
                         <Icon size={15} />
@@ -731,6 +1014,16 @@ export function App({ account }: { account?: Account }) {
                   </div>
                 )}
               </div>
+              {selected.filter((id) => doc.nodes.some((node) => node.id === id)).length > 1 && (
+                <button className="secondary authoring-action" onClick={groupSelected}>
+                  <FolderPlus size={14} /> Group selection
+                </button>
+              )}
+              {selected.some((id) => doc.groups.some((group) => group.id === id)) && (
+                <button className="secondary authoring-action" onClick={ungroupSelected}>
+                  Ungroup
+                </button>
+              )}
               <span className="toolbar-divider" />
               <button
                 className="icon-button"
@@ -770,8 +1063,40 @@ export function App({ account }: { account?: Account }) {
               <span className="toolbar-divider" />
               <button className="layout-button" onClick={recompose} disabled={busy}>
                 <WandSparkles size={15} />
-                {busy ? 'Composing…' : 'Auto layout'}
+                {busy ? 'Composing…' : 'Refresh layout'}
               </button>
+              {selected.some((id) => doc.presentation.nodes[id]?.position) && (
+                <button
+                  className="secondary authoring-action"
+                  onClick={() =>
+                    patch({
+                      overrides: Object.fromEntries(
+                        selected
+                          .filter((id) => doc.presentation.nodes[id]?.position)
+                          .map((id) => [id, { position: null }]),
+                      ),
+                    })
+                  }
+                >
+                  Release selected pins
+                </button>
+              )}
+              {selected.some((id) => doc.edges.some((edge) => edge.id === id && edge.path)) && (
+                <button
+                  className="secondary authoring-action"
+                  onClick={() =>
+                    patch({
+                      edges: selected.flatMap((id) =>
+                        doc.edges.some((edge) => edge.id === id && edge.path)
+                          ? [{ id, path: null }]
+                          : [],
+                      ),
+                    })
+                  }
+                >
+                  Reset selected routes
+                </button>
+              )}
             </div>
           </div>
           {scene ? (
@@ -806,6 +1131,7 @@ export function App({ account }: { account?: Account }) {
               onPath={setPath}
               onResize={resizeNode}
               onEditEdge={editEdge}
+              onViewportCenter={setViewportCenter}
               fitKey={fitKey}
               grid={grid}
               onAdd={() => setMenu('add')}
@@ -816,9 +1142,25 @@ export function App({ account }: { account?: Account }) {
               <p>Composing your diagram…</p>
             </div>
           )}
+          {scene && !doc.nodes.length && (
+            <div className="canvas-onboarding">
+              <span className="canvas-onboarding-mark">
+                <Shapes size={23} />
+              </span>
+              <h2>A blank canvas, ready for your ideas.</h2>
+              <p>Add a shape, then connect and label your diagram as it takes form.</p>
+              <button className="primary" onClick={() => setMenu('add')}>
+                <Plus size={15} /> Choose a shape
+              </button>
+              <button className="secondary" onClick={() => setModal('templates')}>
+                Browse templates
+              </button>
+            </div>
+          )}
           {layoutError && (
             <div className="layout-error" role="alert">
               <AlertCircle size={17} />
+              {staleScene && <strong>Showing the last successful preview. </strong>}
               {layoutError}
               <button onClick={() => setModal('source')}>Edit document</button>
             </div>
@@ -836,18 +1178,20 @@ export function App({ account }: { account?: Account }) {
                 setMobileInspector(true);
               }}
             >
-              {quality?.issues.length ? <AlertCircle size={13} /> : <CheckCircle2 size={13} />}{' '}
-              {busy
-                ? 'Checking layout'
-                : quality?.issues.length
-                  ? `${quality.issues.length} layout suggestions`
-                  : 'All checks passed'}
+              {qualityStatus === 'All checks passed' ? (
+                <CheckCircle2 size={13} />
+              ) : (
+                <AlertCircle size={13} />
+              )}{' '}
+              {qualityStatus}
             </button>
           </footer>
         </main>
         <Inspector
           doc={doc}
           scene={scene}
+          inspection={quality}
+          inspectionState={inspectionState}
           selected={selected}
           patch={patch}
           onDelete={remove}
@@ -874,7 +1218,10 @@ export function App({ account }: { account?: Account }) {
           }
           tab={inspectorTab}
           setTab={setInspectorTab}
-          onDesignSystems={() => setModal('systems')}
+          onDesignSystems={(event) => {
+            dialogReturnFocus.current = event.currentTarget;
+            setModal('systems');
+          }}
         />
       </div>
       <input
@@ -889,7 +1236,7 @@ export function App({ account }: { account?: Account }) {
           try {
             if (file.size > 5_000_000) throw new Error('Choose a document smaller than 5 MB.');
             library.detach();
-            commit(parseDocument(JSON.parse(await file.text())));
+            newDraft(parseDocument(JSON.parse(await file.text())));
             select(null);
             firstLayout.current = true;
             notify(`Opened ${file.name}`);
@@ -905,20 +1252,32 @@ export function App({ account }: { account?: Account }) {
           close={() => setModal('')}
           doc={doc}
           commit={(newDoc) => {
-            if (modal === 'templates') library.detach();
-            commit(newDoc);
+            if (modal === 'templates') {
+              library.detach();
+              newDraft(newDoc);
+            } else commit(newDoc);
             select(null);
             firstLayout.current = true;
           }}
           notify={notify}
+          returnFocus={modal === 'systems' ? dialogReturnFocus.current : null}
         >
           {modal === 'library' ? (
             <LibraryDialog
               library={library}
               doc={doc}
+              recoveryList={listUnnamedDraftSnapshots(draftScope, draftIdentity)}
               onClose={() => setModal('')}
-              onOpen={(newDoc) => {
-                replace(newDoc);
+              onOpenDraftCopy={(snapshot) => {
+                library.detach();
+                openDraftCopy(snapshot.doc);
+                select(null);
+                firstLayout.current = true;
+                setModal('');
+                notify(`Opened a copy of “${snapshot.title}”. The saved draft is preserved.`);
+              }}
+              onOpen={(newDoc, file) => {
+                activate(newDoc, libraryDraftIdentity(file.workspace, file.path), file.revision);
                 select(null);
                 firstLayout.current = true;
               }}
@@ -958,6 +1317,9 @@ export function App({ account }: { account?: Account }) {
                       if (!response.ok && response.status !== 401)
                         throw new Error('Could not sign out. Try again.');
                       signingOut.current = true;
+                      suspendDrafts();
+                      clearDraftScope(draftScope);
+                      clipboard.current = null;
                       const channel = new BroadcastChannel('forma-auth');
                       channel.postMessage('signed-out');
                       channel.close();
@@ -968,6 +1330,36 @@ export function App({ account }: { account?: Account }) {
                   }}
                 >
                   Sign out now
+                </button>
+              </div>
+            </>
+          ) : modal === 'recovery' && recovery ? (
+            <>
+              <h2 id="modal-title">Recover this draft?</h2>
+              <p>
+                {recovery.stale
+                  ? 'This unsaved draft is based on an older library revision. Recover it to compare and save it as a copy; the current library version remains available.'
+                  : 'A saved draft is available. The current library version remains available.'}
+              </p>
+              <div className="modal-actions">
+                <button
+                  className="secondary"
+                  onClick={() => {
+                    keepOriginal();
+                    setModal('');
+                  }}
+                >
+                  Keep library version
+                </button>
+                <button
+                  className="primary"
+                  onClick={() => {
+                    if (recovery.stale) library.detach();
+                    recover();
+                    setModal('');
+                  }}
+                >
+                  Recover draft
                 </button>
               </div>
             </>

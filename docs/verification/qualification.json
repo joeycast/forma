@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-12",
+  "batch": "foundation-and-workspace",
+  "result": "passed-scoped-qualification",
+  "unit": {
+    "passed": 107,
+    "failed": 0,
+    "log": "unit.log"
+  },
+  "build": {
+    "passed": true,
+    "log": "build.log"
+  },
+  "browser": {
+    "verifiedCases": 19,
+    "method": "Six unaffected routing/inspection cases from the full IndexedDB run, seven authoring cases rerun after the final palette fix, and six property cases (five in the affected-file run, one corrected native-option matcher rerun)",
+    "logs": [
+      "attempt-7/browser.log",
+      "browserAuthoring.log",
+      "browserProperties.log",
+      "browserBulkRole.log"
+    ],
+    "singleFinalFullSuiteRun": false
+  },
+  "format": {
+    "passed": true,
+    "logs": ["format.log", "formatFinal.log"]
+  },
+  "schemaParity": {
+    "schema/forma.v2.schema.json": true,
+    "schema/design-system.v1.schema.json": true
+  },
+  "diff": {
+    "passed": true
+  },
+  "package": {
+    "dryRunPassed": true,
+    "cleanInstallationVerified": true,
+    "runtime": "Node v24.19.0 on Linux",
+    "report": "package-install.md",
+    "exactNode22Verified": false,
+    "upgradeVerified": false,
+    "oneCommandLaunchVerified": true,
+    "oneCommandReport": "package-0.6.0.md",
+    "note": "Version-only CLI/MCP/package bump; graphical runtime unchanged from the qualified production build."
+  },
+  "releaseReady": false,
+  "version": "0.6.0"
+}

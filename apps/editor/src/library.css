@@ -1,0 +1,141 @@
+.library-list > .library-entry {
+  padding: 0;
+  border-bottom: 1px solid #edf0f3;
+  background: white;
+}
+.library-entry-open {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 13px 14px 8px;
+  text-align: left;
+}
+.library-entry-open:hover {
+  background: #f5f2fc;
+}
+.library-entry-open span,
+.library-trash-entry small {
+  color: #677184;
+  font-size: 12px;
+}
+.library-entry-actions {
+  display: flex;
+  gap: 4px;
+  padding: 0 10px 9px;
+}
+.library-entry-actions button {
+  padding: 4px 7px;
+  border-radius: 4px;
+  color: #7160ca;
+  font-size: 11px;
+}
+.library-entry-actions button:hover {
+  background: #f1eefb;
+}
+.library-inline-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f8f8fb;
+}
+.library-inline-action .field {
+  min-width: 220px;
+  flex: 1;
+  margin: 0;
+}
+.library-inline-action > span {
+  flex: 1 1 100%;
+  color: #4c5667;
+}
+.library-trash {
+  padding: 8px 0 2px;
+}
+.library-trash h3 {
+  margin: 10px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.library-trash-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 2px;
+  border-bottom: 1px solid #edf0f3;
+}
+.library-trash-entry > span {
+  display: flex;
+  flex: 1;
+  min-width: 180px;
+  flex-direction: column;
+  gap: 3px;
+}
+.library-trash-entry .library-inline-action {
+  flex: 1 1 100%;
+}
+.library-recovery {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #d8d2f3;
+  border-radius: 8px;
+  background: #faf9ff;
+}
+.library-recovery h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+.library-recovery > p {
+  margin: 0 0 8px;
+  color: #677184;
+  font-size: 12px;
+}
+.library-recovery-list {
+  display: grid;
+  gap: 6px;
+}
+.library-recovery-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid #e7e3f6;
+}
+.library-recovery-entry > span {
+  display: flex;
+  min-width: 180px;
+  flex-direction: column;
+  gap: 3px;
+}
+.library-recovery-entry small {
+  color: #677184;
+  font-size: 11px;
+}
+.library-conflict {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #e2b760;
+  border-radius: 8px;
+  background: #fff9e9;
+}
+.library-conflict p {
+  margin: 0;
+}
+.library-compare {
+  padding-top: 10px;
+  border-top: 1px solid #ecdba9;
+}
+.library-compare pre {
+  max-height: 240px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 6px;
+  background: white;
+  font-size: 10px;
+}

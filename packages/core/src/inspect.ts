@@ -11,13 +11,96 @@ export interface VisualIssue {
   location?: { x: number; y: number };
   fix?: { edge: AlignEdge; target: number };
 }
-export function inspectScene(scene: Scene) {
+export interface InspectionResult {
+  fingerprint: string;
+  issues: VisualIssue[];
+  summary: {
+    errors: number;
+    warnings: number;
+    nodes: number;
+    edges: number;
+    crossings: number;
+    pinned: number;
+    density: number;
+  };
+}
+
+const recentInspections = new Map<string, InspectionResult>();
+
+function inspectionSignature(scene: Scene) {
+  return JSON.stringify({
+    bounds: scene.bounds,
+    nodes: scene.nodes.map((node) => [
+      node.id,
+      node.semantic.label,
+      node.semantic.group,
+      node.x,
+      node.y,
+      node.width,
+      node.height,
+      node.titleLines,
+      node.descriptionLines,
+      node.style?.shape,
+      node.style?.fontFamily,
+      node.style?.fontSize,
+      node.style?.fontWeight,
+      node.style?.padding,
+      node.pinned,
+    ]),
+    groups: scene.groups.map((group) => [
+      group.id,
+      group.semantic.label,
+      group.semantic.parent,
+      group.x,
+      group.y,
+      group.width,
+      group.height,
+    ]),
+    edges: scene.edges.map((edge) => [
+      edge.id,
+      edge.semantic.source,
+      edge.semantic.target,
+      edge.style?.routing,
+      edge.points,
+      edge.label,
+      edge.routingBudgetExceeded,
+    ]),
+  });
+}
+
+export function inspectScene(scene: Scene): InspectionResult {
+  const signature = inspectionSignature(scene);
+  const cached = recentInspections.get(signature);
+  if (cached) {
+    recentInspections.delete(signature);
+    recentInspections.set(signature, cached);
+    return { ...cached, fingerprint: scene.fingerprint };
+  }
   const issues: VisualIssue[] = [];
   const add = (code: string, severity: VisualIssue['severity'], message: string, ids: string[]) =>
     issues.push({ code, severity, message, ids });
   const { nodes, groups, edges, bounds } = scene;
+  // Sweep by the left edge to avoid testing every distant node pair. The 20px
+  // expansion retains every pair that can produce either overlap diagnostic.
+  const nodeOrder = nodes
+    .map((node, index) => ({ node, index }))
+    .sort((a, b) => a.node.x - b.node.x || a.index - b.index);
+  const nodeCandidates = new Set<string>();
+  for (let a = 0; a < nodeOrder.length; a++) {
+    const left = nodeOrder[a];
+    for (
+      let b = a + 1;
+      b < nodeOrder.length && nodeOrder[b].node.x < left.node.x + left.node.width + 20;
+      b++
+    ) {
+      const i = Math.min(left.index, nodeOrder[b].index),
+        j = Math.max(left.index, nodeOrder[b].index);
+      nodeCandidates.add(`${i}:${j}`);
+    }
+  }
   for (let i = 0; i < nodes.length; i++)
     for (let j = i + 1; j < nodes.length; j++) {
+      if (!nodeCandidates.has(`${i}:${j}`)) continue;
       const a = nodes[i],
         b = nodes[j];
       if (overlaps(a, b))
@@ -94,26 +177,20 @@ export function inspectScene(scene: Scene) {
     )
       add('group-heading-clipping', 'error', 'The group heading exceeds its container.', [g.id]);
   for (const edge of edges) {
+    if (edge.routingBudgetExceeded)
+      add(
+        'routing-budget-fallback',
+        'warning',
+        'Automatic routing reached its work budget. The connector remains visible; review its clearance and crossings.',
+        [edge.id],
+      );
     const onBoundary = (p: Point | undefined, b: SceneNode | undefined) =>
       p &&
       b &&
-      (edge.style?.routing === 'straight'
-        ? Math.hypot(
-            p.x - shapeBoundary(b, p, b.style?.shape).x,
-            p.y - shapeBoundary(b, p, b.style?.shape).y,
-          ) < 1.5
-        : p &&
-          b &&
-          p.x >= b.x - 1 &&
-          p.x <= b.x + b.width + 1 &&
-          p.y >= b.y - 1 &&
-          p.y <= b.y + b.height + 1 &&
-          Math.min(
-            Math.abs(p.x - b.x),
-            Math.abs(p.x - b.x - b.width),
-            Math.abs(p.y - b.y),
-            Math.abs(p.y - b.y - b.height),
-          ) <= 1);
+      Math.hypot(
+        p.x - shapeBoundary(b, p, b.style?.shape).x,
+        p.y - shapeBoundary(b, p, b.style?.shape).y,
+      ) < 1.5;
     if (
       !onBoundary(
         edge.points[0],
@@ -207,7 +284,7 @@ export function inspectScene(scene: Scene) {
       'Nodes occupy more than 78% of the composition. Use comfortable spacing.',
       nodes.map((n) => n.id),
     );
-  return {
+  const result: InspectionResult = {
     fingerprint: scene.fingerprint,
     issues,
     summary: {
@@ -220,6 +297,9 @@ export function inspectScene(scene: Scene) {
       density: Math.round(density * 100) / 100,
     },
   };
+  recentInspections.set(signature, result);
+  if (recentInspections.size > 16) recentInspections.delete(recentInspections.keys().next().value!);
+  return result;
 }
 function isAncestor(ancestor: string, child: string | undefined, scene: Scene): boolean {
   while (child) {

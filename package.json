@@ -1,6 +1,6 @@
 {
   "name": "forma-diagrams",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "description": "Local-first professional diagrams for agents and humans",
   "type": "module",
   "license": "MIT",
@@ -27,6 +27,7 @@
     "build": "tsc --noEmit && node scripts/licenses.mjs && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --import tsx --test tests/*.test.ts",
+    "test:browser": "playwright test",
     "forma": "node --import tsx packages/cli/src/index.ts",
     "check": "npm test && npm run build",
     "format": "prettier --write .",
@@ -48,6 +49,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

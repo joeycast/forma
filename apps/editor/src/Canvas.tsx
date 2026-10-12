@@ -32,6 +32,7 @@ import {
   AlignVerticalSpaceAround,
 } from 'lucide-react';
 import type { AlignEdge, DistributeAxis } from '../../../packages/core/src';
+import { CANVAS_RESIZE_MINIMUM, constrainCanvasResize } from './canvas-resize';
 import {
   nodeMarkup,
   groupMarkup,
@@ -41,9 +42,12 @@ import {
   attachmentPoint,
   insertWaypoint,
   nearestPort,
-  retargetRoute,
-  routeThrough,
-  slideOrthogonalSegment,
+  previewRoute,
+  shapeBoundary,
+  samePoints,
+  segmentWaypoints,
+  slideOrthogonalSegmentWithIntent,
+  portPoint,
   portSides,
   type Scene,
   type SceneNode,
@@ -71,8 +75,8 @@ const DiagramCard = memo(({ data, selected }: NodeProps<Node<CardData>>) => {
     <div className={`diagram-card ${selected ? 'is-selected' : ''}`} data-node-id={data.node.id}>
       <NodeResizer
         isVisible={selected}
-        minWidth={80}
-        minHeight={40}
+        minWidth={CANVAS_RESIZE_MINIMUM.width}
+        minHeight={CANVAS_RESIZE_MINIMUM.height}
         maxWidth={1200}
         maxHeight={1600}
         color="#8b70d1"
@@ -80,14 +84,20 @@ const DiagramCard = memo(({ data, selected }: NodeProps<Node<CardData>>) => {
       {portSides.flatMap((side) => {
         const count = data.node.semantic.ports?.[side] ?? 1;
         return Array.from({ length: count }, (_, index) => {
-          const along = `${((index + 1) / (count + 1)) * 100}%`;
+          const point = portPoint(box, side, index, count, box.style?.shape);
           return (
             <Handle
               key={`${side}:${index}`}
               id={`${side}:${index}`}
               type="source"
               position={handlePosition[side]}
-              style={side === 'top' || side === 'bottom' ? { left: along } : { top: along }}
+              style={{
+                left: point.x - box.x,
+                top: point.y - box.y,
+                right: 'auto',
+                bottom: 'auto',
+                transform: 'translate(-50%, -50%)',
+              }}
             />
           );
         });
@@ -121,11 +131,13 @@ const DiagramConnector = memo(({ data, selected }: EdgeProps) => {
     edge: SceneEdge;
     theme: 'paper' | 'midnight';
     onPath?: (id: string, path: Point[] | null) => void;
-    onPreview?: (id: string, path: Point[]) => void;
+    onPreview?: (id: string, path: Point[] | null) => void;
     onDraftPoints?: (id: string, points: Point[] | null) => void;
   };
   const { screenToFlowPosition } = useReactFlow();
   const [hover, setHover] = useState(false);
+  const gestureCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => gestureCleanup.current?.(), []);
   const waypoints = edge.semantic.path ?? [];
   const segments = edge.points.flatMap((point, index) => {
     if (!index) return [];
@@ -159,10 +171,16 @@ const DiagramConnector = memo(({ data, selected }: EdgeProps) => {
           event.stopPropagation();
           event.preventDefault();
           const point = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-          const anchors = edge.semantic.path?.length
-            ? [edge.points[0], ...edge.semantic.path, edge.points.at(-1)!]
-            : edge.points;
-          onPath(edge.id, insertWaypoint(anchors, point));
+          const path = edge.semantic.path?.length
+            ? insertWaypoint([edge.points[0], ...edge.semantic.path, edge.points.at(-1)!], point)
+            : [{ x: Math.round(point.x * 100) / 100, y: Math.round(point.y * 100) / 100 }];
+          const prior = edge.semantic.path ?? [];
+          if (
+            path.length === prior.length &&
+            path.every((p, i) => p.x === prior[i].x && p.y === prior[i].y)
+          )
+            return;
+          onPath(edge.id, path);
         }}
       />
       <g
@@ -185,21 +203,48 @@ const DiagramConnector = memo(({ data, selected }: EdgeProps) => {
               event.preventDefault();
               const origin = edge.points.map((item) => ({ ...item }));
               let latest = origin;
+              let intent: Point[] = [];
+              const pointerStart = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+              const initialValue = Math.round(segment.horizontal ? pointerStart.y : pointerStart.x);
+              let changed = false;
               const move = (ev: PointerEvent) => {
                 const flow = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
                 const value = Math.round(segment.horizontal ? flow.y : flow.x);
-                latest = slideOrthogonalSegment(origin, segment.index, value);
+                changed = value !== initialValue;
+                const result = slideOrthogonalSegmentWithIntent(origin, segment.index, value);
+                latest = result.points;
+                intent = result.intent;
                 onDraftPoints(edge.id, latest);
               };
-              const up = () => {
+              const finish = (commit: boolean) => {
                 window.removeEventListener('pointermove', move);
                 window.removeEventListener('pointerup', up);
+                window.removeEventListener('pointercancel', cancel);
+                window.removeEventListener('keydown', keydown);
+                gestureCleanup.current = null;
                 onDraftPoints(edge.id, null);
-                const corners = latest.slice(1, -1);
-                onPath(edge.id, corners.length ? corners : null);
+                if (commit && changed && !samePoints(origin, latest)) {
+                  const waypoints = segmentWaypoints(
+                    origin,
+                    latest,
+                    segment.index,
+                    intent,
+                    edge.semantic.path ?? [],
+                  );
+                  onPath(edge.id, waypoints.length ? waypoints : null);
+                }
               };
+              const up = () => finish(true);
+              const cancel = () => finish(false);
+              const keydown = (ev: KeyboardEvent) => {
+                if (ev.key === 'Escape') cancel();
+              };
+              gestureCleanup.current?.();
+              gestureCleanup.current = cancel;
               window.addEventListener('pointermove', move);
               window.addEventListener('pointerup', up);
+              window.addEventListener('pointercancel', cancel);
+              window.addEventListener('keydown', keydown);
             }}
           />
         ))}
@@ -215,7 +260,8 @@ const DiagramConnector = memo(({ data, selected }: EdgeProps) => {
               if (!onPath) return;
               event.stopPropagation();
               event.preventDefault();
-              const origin = waypoints.map((item) => ({ ...item }));
+              const start = waypoints.map((item) => ({ ...item }));
+              const origin = start.map((item) => ({ ...item }));
               const move = (ev: PointerEvent) => {
                 const flow = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
                 origin[index] = { x: Math.round(flow.x), y: Math.round(flow.y) };
@@ -224,16 +270,33 @@ const DiagramConnector = memo(({ data, selected }: EdgeProps) => {
                   origin.map((item) => ({ ...item })),
                 );
               };
-              const up = () => {
+              const finish = (commit: boolean) => {
                 window.removeEventListener('pointermove', move);
                 window.removeEventListener('pointerup', up);
-                onPath(
-                  edge.id,
-                  origin.map((item) => ({ ...item })),
-                );
+                window.removeEventListener('pointercancel', cancel);
+                window.removeEventListener('keydown', keydown);
+                gestureCleanup.current = null;
+                if (commit && !samePoints(start, origin))
+                  onPath(
+                    edge.id,
+                    origin.map((item) => ({ ...item })),
+                  );
+                else if (commit) onPreview?.(edge.id, null);
               };
+              const up = () => finish(true);
+              const cancel = () => {
+                finish(false);
+                onPreview?.(edge.id, null);
+              };
+              const keydown = (ev: KeyboardEvent) => {
+                if (ev.key === 'Escape') cancel();
+              };
+              gestureCleanup.current?.();
+              gestureCleanup.current = cancel;
               window.addEventListener('pointermove', move);
               window.addEventListener('pointerup', up);
+              window.addEventListener('pointercancel', cancel);
+              window.addEventListener('keydown', keydown);
             }}
           />
         ))}
@@ -258,6 +321,7 @@ export function Canvas({
   fitKey,
   grid,
   onAdd,
+  onViewportCenter,
 }: {
   scene: Scene;
   selected: string[];
@@ -274,6 +338,7 @@ export function Canvas({
   fitKey: number;
   grid: boolean;
   onAdd: () => void;
+  onViewportCenter?: (center: Point) => void;
 }) {
   const [dragPositions, setDragPositions] = useState<Record<string, { x: number; y: number }>>({}),
     [sizes, setSizes] = useState<Record<string, { width: number; height: number }>>({}),
@@ -295,7 +360,15 @@ export function Canvas({
   }
   const positions = useRef(dragPositions);
   const resizing = useRef(new Set<string>());
-  const { fitView, zoomIn, zoomOut } = useReactFlow();
+  const { fitView, zoomIn, zoomOut, screenToFlowPosition } = useReactFlow();
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const reportViewportCenter = () => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect || !onViewportCenter) return;
+    onViewportCenter(
+      screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }),
+    );
+  };
   const nodes = useMemo(() => {
     const theme = scene.document.presentation.theme,
       b = scene.bounds;
@@ -383,7 +456,7 @@ export function Canvas({
       const index = Math.min(explicitIndex ?? Math.floor((count - 1) / 2), count - 1);
       return `${explicitSide}:${index}`;
     }
-    const nearest = nearestPort(box, box.semantic.ports, point);
+    const nearest = nearestPort(box, box.semantic.ports, point, box.style?.shape);
     return nearest.distance < 8 ? `${nearest.side}:${nearest.index}` : undefined;
   };
   const edges: Edge[] = useMemo(
@@ -404,6 +477,7 @@ export function Canvas({
           e.style?.sourcePort,
           e.style?.sourceIndex,
           down ? 'bottom' : 'right',
+          source.style?.shape,
         );
         const to = attachmentPoint(
           target,
@@ -411,6 +485,7 @@ export function Canvas({
           e.style?.targetPort,
           e.style?.targetIndex,
           down ? 'top' : 'left',
+          target.style?.shape,
         );
         const preview = pathPreview?.id === e.id ? pathPreview.path : null;
         const custom = preview ?? e.semantic.path;
@@ -418,10 +493,34 @@ export function Canvas({
         if (draftPoints?.id === e.id) {
           edge = { ...e, label: undefined, points: draftPoints.points };
         } else if (preview || (dragging && source.id !== target.id)) {
-          const points = custom?.length
-            ? routeThrough(from.point, custom, to.point, from.side, to.side)
-            : (retargetRoute(e.points, from.point, to.point, from.side, to.side) ??
-              routeThrough(from.point, e.points.slice(1, -1), to.point, from.side, to.side));
+          const straightDirect =
+            e.style?.routing === 'straight' &&
+            !custom?.length &&
+            !e.style?.sourcePort &&
+            !e.style?.targetPort;
+          const sourcePoint = straightDirect
+            ? shapeBoundary(
+                source,
+                { x: target.x + target.width / 2, y: target.y + target.height / 2 },
+                source.style?.shape,
+              )
+            : from.point;
+          const targetPoint = straightDirect
+            ? shapeBoundary(
+                target,
+                { x: source.x + source.width / 2, y: source.y + source.height / 2 },
+                target.style?.shape,
+              )
+            : to.point;
+          const points = previewRoute(
+            e.points,
+            sourcePoint,
+            targetPoint,
+            from.side,
+            to.side,
+            e.style?.routing,
+            custom ?? undefined,
+          );
           edge = {
             ...e,
             semantic: preview ? { ...e.semantic, path: preview } : e.semantic,
@@ -458,7 +557,8 @@ export function Canvas({
                 setDraftPoints(null);
                 onPath(id, path);
               },
-              onPreview: (id: string, path: Point[]) => setPathPreview({ id, path }),
+              onPreview: (id: string, path: Point[] | null) =>
+                setPathPreview(path ? { id, path } : null),
               onDraftPoints: (id: string, points: Point[] | null) =>
                 setDraftPoints(points ? { id, points } : null),
             },
@@ -468,7 +568,10 @@ export function Canvas({
     [scene, nodes, selected, down, dragging, pathPreview, draftPoints, onPath],
   );
   return (
-    <div className={`canvas ${grid ? '' : 'no-grid'} ${reconnecting ? 'reconnecting' : ''}`}>
+    <div
+      ref={canvasRef}
+      className={`canvas ${grid ? '' : 'no-grid'} ${reconnecting ? 'reconnecting' : ''}`}
+    >
       <div className="canvas-tag">
         <span className="sheet-dot" />{' '}
         {scene.document.type === 'architecture'
@@ -481,6 +584,7 @@ export function Canvas({
           (scene.document.presentation.theme === 'paper' ? 'Paper' : 'Midnight')}
       </div>
       <ReactFlow
+        onInit={reportViewportCenter}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
@@ -513,10 +617,11 @@ export function Canvas({
             if (change.type !== 'dimensions' || !change.dimensions) continue;
             if (change.resizing) resizing.current.add(change.id);
             if (!resizing.current.has(change.id)) continue;
-            const size = {
-              width: change.dimensions.width,
-              height: change.dimensions.height,
-            };
+            const node = scene.nodes.find((item) => item.id === change.id);
+            const size = constrainCanvasResize(
+              { width: change.dimensions.width, height: change.dimensions.height },
+              node?.style,
+            );
             setSizes((current) => ({ ...current, [change.id]: size }));
             if (change.resizing === false) {
               resizing.current.delete(change.id);
@@ -583,7 +688,10 @@ export function Canvas({
         onNodesDelete={(ns) => onDelete(ns.filter((n) => n.type === 'diagram').map((n) => n.id))}
         onEdgesDelete={(es) => onDelete(es.map((e) => e.id))}
         deleteKeyCode={null}
-        onMove={(_, viewport) => setZoom(Math.round(viewport.zoom * 100))}
+        onMove={(_, viewport) => {
+          setZoom(Math.round(viewport.zoom * 100));
+          reportViewportCenter();
+        }}
         snapToGrid={grid}
         snapGrid={[8, 8]}
         panOnDrag={pan ? true : [1, 2]}

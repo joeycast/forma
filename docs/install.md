@@ -27,7 +27,7 @@ The skill is at `$(npm root -g)/forma-diagrams/skills/forma/SKILL.md` after a gl
 
 ## Define your visual identity
 
-Choose **Create or edit design system** in the Design inspector. Set your palette, corners, typography size, and spacing. Advanced JSON exposes roles and all supported properties. Give the design a unique identity ID, save/apply it, and export its JSON for your agents:
+Choose **Create or edit design system** in the Design inspector. Set your palette, corners, typography, spacing, defaults and roles. Advanced JSON exposes the full supported schema. Give the design a unique identity ID, save an immutable revision, then apply it separately to embed its snapshot in the diagram. Export its JSON for your agents:
 
 ```sh
 forma style ~/Forma/architecture/checkout.forma.json --system company.design.json

@@ -47,3 +47,20 @@ jobs:
           curl -fsS -H 'Host: forma.test' http://127.0.0.1:4250/healthz
       - if: always()
         run: docker logs forma-test || true
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failures
+          path: test-results/

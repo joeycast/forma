@@ -2,6 +2,7 @@ import { dashArray } from './styles';
 import type { Scene, SceneNode, SceneGroup, SceneEdge } from './scene';
 import { accents, themes } from './theme';
 import { polylinePath } from './geometry';
+import { SHAPE_REGISTRY, shapeTextRegion, type ShapeName } from './shapes';
 export const escapeXml = (v: string | number) =>
   String(v)
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
@@ -36,21 +37,42 @@ export function iconMarkup(kind: string, color: string, x = 0, y = 0, size = 20)
   return `<g transform="translate(${x} ${y}) scale(${size / 24})" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${icons[kind] ?? icons.service}</g>`;
 }
 export function nodeMarkup(n: SceneNode, themeName: 'paper' | 'midnight'): string {
-  if (n.style && Object.keys(n.style).length) return styledNodeMarkup(n, themeName);
+  if (n.variant === 'shape' || (n.variant === undefined && n.style && Object.keys(n.style).length))
+    return styledNodeMarkup(n, themeName);
   const theme = themes[themeName],
     accent = accents[n.accent],
     dark = themeName === 'midnight',
-    primary = n.semantic.emphasis === 'primary';
+    primary = n.semantic.emphasis === 'primary',
+    s = n.style ?? {};
   const ink = dark ? accent.dark : accent.ink,
-    fill = dark ? '#2b394e' : accent.fill;
+    fill = s.fill ?? (dark ? '#2b394e' : accent.fill),
+    stroke = s.stroke ?? (primary ? (dark ? ink : accent.border) : theme.border),
+    title = s.text ?? theme.text,
+    secondary = s.secondary ?? theme.secondary,
+    padding = s.padding ?? 20,
+    size = s.fontSize ?? 16,
+    weight = s.fontWeight ?? 600,
+    align = s.align ?? 'left',
+    textX = align === 'center' ? n.width / 2 : align === 'right' ? n.width - padding : padding,
+    anchor =
+      align === 'center' ? 'text-anchor="middle"' : align === 'right' ? 'text-anchor="end"' : '',
+    blockHeight =
+      n.titleLines.length * size * 1.375 +
+      (n.descriptionLines.length ? 8 + n.descriptionLines.length * 17 : 0),
+    textTop =
+      (s.verticalAlign ?? 'top') === 'top'
+        ? 56 + padding
+        : s.verticalAlign === 'bottom'
+          ? n.height - padding - blockHeight + size
+          : (56 + n.height - padding - blockHeight) / 2 + size;
   const body = `<rect x="0.5" y="1.5" width="${n.width - 1}" height="${n.height - 1}" rx="10" fill="${theme.shadow}" opacity=".04"/>
-    <rect x=".5" y=".5" width="${n.width - 1}" height="${n.height - 1}" rx="10" fill="${primary ? fill : theme.card}" stroke="${primary ? (dark ? ink : accent.border) : theme.border}"/>
-    <rect x="20" y="18" width="32" height="32" rx="8" fill="${fill}"/>
-    ${iconMarkup(n.semantic.kind, ink, 26, 24, 20)}
-    ${t(n.width - 20, 38, n.semantic.kind.toUpperCase(), 9, theme.secondary, 500, 'text-anchor="end" letter-spacing="1.1"')}
-    ${n.titleLines.map((line, i) => t(20, 76 + i * 22, line, 16, theme.text, 600)).join('')}
-    ${n.descriptionLines.map((line, i) => t(20, 76 + n.titleLines.length * 22 + 4 + i * 17, line, 12, theme.secondary)).join('')}`;
-  return `<g opacity="${n.semantic.emphasis === 'muted' ? 0.62 : 1}">${body}</g>`;
+    <rect x=".5" y=".5" width="${n.width - 1}" height="${n.height - 1}" rx="${s.radius ?? 10}" fill="${s.fill ?? (primary ? fill : theme.card)}" stroke="${stroke}" stroke-width="${s.strokeWidth ?? 1}" stroke-dasharray="${dashArray(s.dash)}"/>
+    <rect x="${padding}" y="18" width="32" height="32" rx="8" fill="${fill}"/>
+    ${iconMarkup(n.semantic.kind, ink, padding + 6, 24, 20)}
+    ${t(n.width - padding, 38, n.semantic.kind.toUpperCase(), 9, secondary, 500, 'text-anchor="end" letter-spacing="1.1"')}
+    ${n.titleLines.map((line, i) => t(textX, textTop + i * size * 1.375, line, size, title, weight, anchor)).join('')}
+    ${n.descriptionLines.map((line, i) => t(textX, textTop + n.titleLines.length * size * 1.375 + 4 + i * 17, line, 12, secondary, 400, anchor)).join('')}`;
+  return `<g font-family="${escapeXml(s.fontFamily ?? 'IBM Plex Sans')}" opacity="${s.opacity ?? (n.semantic.emphasis === 'muted' ? 0.62 : 1)}">${body}</g>`;
 }
 function styledNodeMarkup(n: SceneNode, themeName: 'paper' | 'midnight'): string {
   const s = n.style!,
@@ -58,20 +80,19 @@ function styledNodeMarkup(n: SceneNode, themeName: 'paper' | 'midnight'): string
     w = n.width,
     h = n.height;
   const shape = s.shape ?? 'rect',
+    definition = SHAPE_REGISTRY[shape],
     radius = shape === 'pill' ? h / 2 : (s.radius ?? 10);
   const attrs = `fill="${s.fill ?? theme.card}" stroke="${s.stroke ?? theme.border}" stroke-width="${s.strokeWidth ?? 1}" stroke-dasharray="${dashArray(s.dash)}"`;
   let body = `<rect x=".5" y=".5" width="${w - 1}" height="${h - 1}" rx="${radius}" ${attrs}/>`;
-  if (shape === 'diamond')
-    body = `<path d="M${w / 2} 0 L${w} ${h / 2} L${w / 2} ${h} L0 ${h / 2}Z" ${attrs}/>`;
-  if (shape === 'ellipse')
+  if (definition.geometry === 'ellipse')
     body = `<ellipse cx="${w / 2}" cy="${h / 2}" rx="${w / 2 - 0.5}" ry="${h / 2 - 0.5}" ${attrs}/>`;
-  if (shape === 'cylinder')
-    body = `<path d="M0 14 C0 -4 ${w} -4 ${w} 14 V${h - 14} C${w} ${h + 4} 0 ${h + 4} 0 ${h - 14}Z M0 14 C0 32 ${w} 32 ${w} 14" ${attrs}/>`;
-  if (shape === 'text') body = '';
+  if (definition.geometry === 'path') body = `<path d="${definition.path(w, h)}" ${attrs}/>`;
+  if (definition.geometry === 'none') body = '';
   const size = s.fontSize ?? 16,
     weight = s.fontWeight ?? 600;
-  const align = s.align ?? (['diamond', 'ellipse', 'pill'].includes(shape) ? 'center' : 'left');
-  const inset = shape === 'diamond' ? w * 0.23 : shape === 'ellipse' ? w * 0.16 : (s.padding ?? 20);
+  const align = s.align ?? definition.defaultAlign;
+  const region = shapeTextRegion(shape as ShapeName, w, h, s.padding ?? 20);
+  const inset = region.x;
   const x = align === 'center' ? w / 2 : align === 'right' ? w - inset : inset;
   const anchor =
     align === 'center' ? 'text-anchor="middle"' : align === 'right' ? 'text-anchor="end"' : '';
@@ -79,13 +100,15 @@ function styledNodeMarkup(n: SceneNode, themeName: 'paper' | 'midnight'): string
     n.titleLines.length * size * 1.4 +
     (n.descriptionLines.length ? 8 + n.descriptionLines.length * 17 : 0);
   const valign = s.verticalAlign ?? 'middle';
-  const vInset = shape === 'diamond' ? h * 0.28 : shape === 'ellipse' ? h * 0.2 : (s.padding ?? 20);
+  const vInset = region.y;
   const blockTop =
     valign === 'top'
       ? vInset
       : valign === 'bottom'
         ? h - vInset - blockHeight
-        : (h - blockHeight) / 2;
+        : definition.points
+          ? region.y + (region.height - blockHeight) / 2
+          : (h - blockHeight) / 2;
   const top = blockTop + size;
   body += n.titleLines
     .map((line, i) => t(x, top + i * size * 1.4, line, size, s.text ?? theme.text, weight, anchor))

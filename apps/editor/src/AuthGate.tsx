@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { App } from './App';
 import { hosted } from './hosting';
-export type Account = { name: string; email: string };
-export function AuthGate() {
+import type { Diagram } from '../../../packages/core/src';
+import { clearLastValidDocument } from './ErrorBoundary';
+export type Account = { name: string; email: string; ownerHash: string };
+export function AuthGate({ onValidDocument }: { onValidDocument?: (doc: Diagram) => void }) {
   const [account, setAccount] = useState<Account | null>(null),
     [loading, setLoading] = useState(hosted),
     [error, setError] = useState('');
+  const ownerRef = useRef<string | null>(null);
   useEffect(() => {
     if (!hosted) return;
     let live = true;
@@ -13,6 +16,8 @@ export function AuthGate() {
     channel.onmessage = (event) => {
       if (event.data === 'signed-out') {
         live = false;
+        clearLastValidDocument();
+        ownerRef.current = null;
         setAccount(null);
         setLoading(false);
       }
@@ -23,7 +28,23 @@ export function AuthGate() {
         return response.json();
       })
       .then((data) => {
-        if (live) setAccount(data.user);
+        if (!live) return;
+        if (!data.user) {
+          clearLastValidDocument();
+          ownerRef.current = null;
+          setAccount(null);
+          return;
+        }
+        const nextOwner = data.user?.ownerHash;
+        if (typeof nextOwner !== 'string' || !nextOwner) {
+          clearLastValidDocument();
+          ownerRef.current = null;
+          setError('The workspace did not provide a private account identifier. Refresh to retry.');
+          return;
+        }
+        if (nextOwner !== ownerRef.current) clearLastValidDocument();
+        ownerRef.current = nextOwner;
+        setAccount(data.user);
       })
       .catch((e) => {
         if (live) setError(e.message);
@@ -41,8 +62,16 @@ export function AuthGate() {
       window.removeEventListener('pageshow', restore);
     };
   }, []);
-  if (!hosted) return <App />;
-  if (account) return <App account={account} />;
+  if (!hosted) return <App onValidDocument={onValidDocument} />;
+  if (account)
+    return (
+      <App
+        account={account}
+        onValidDocument={(doc) => {
+          if (ownerRef.current === account.ownerHash) onValidDocument?.(doc);
+        }}
+      />
+    );
   const reason = new URLSearchParams(location.search).get('authError');
   const messages: Record<string, string> = {
     expired: 'This sign-in attempt expired. Please try again.',

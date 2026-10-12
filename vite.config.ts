@@ -14,5 +14,6 @@ export default defineConfig({
   ],
   base: hosted ? '/' : './',
   server: { port: 5173 },
+  worker: { format: 'es' },
   build: { outDir: 'dist' },
 });

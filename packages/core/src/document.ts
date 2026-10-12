@@ -88,6 +88,7 @@ export const documentSchema = z
               .object({
                 position: position.optional(),
                 color: color.optional(),
+                variant: z.enum(['classic', 'shape']).optional(),
                 style: elementStyleSchema.optional(),
               })
               .strict(),
@@ -216,6 +217,18 @@ export function parseDocument(input: unknown): Diagram {
   if (issues.length) throw new DocumentError(issues);
   return doc;
 }
+const stylePatchSchema = z
+  .object(
+    Object.fromEntries(
+      Object.entries(elementStyleSchema.shape).map(([key, schema]) => [
+        key,
+        schema.nullable().optional(),
+      ]),
+    ) as unknown as {
+      [K in keyof typeof elementStyleSchema.shape]: (typeof elementStyleSchema.shape)[K];
+    },
+  )
+  .strict();
 export const patchSchema = z
   .object({
     title: z.string().min(1).max(200).optional(),
@@ -257,7 +270,8 @@ export const patchSchema = z
           .object({
             position: position.nullable().optional(),
             color: color.nullable().optional(),
-            style: elementStyleSchema.nullable().optional(),
+            variant: z.enum(['classic', 'shape']).nullable().optional(),
+            style: stylePatchSchema.nullable().optional(),
           })
           .strict()
           .nullable(),
@@ -270,6 +284,26 @@ export type Patch = z.input<typeof patchSchema>;
 export function patchDocument(input: Diagram, raw: unknown): Diagram {
   const doc = structuredClone(parseDocument(input));
   const patch = patchSchema.parse(raw);
+  const originalNodeIds = new Set(doc.nodes.map((node) => node.id));
+  if (patch.designSystem !== undefined) {
+    for (const node of doc.nodes) {
+      const override = doc.presentation.nodes[node.id];
+      const hasLocalStyle =
+        Object.keys(node.style ?? {}).length > 0 || Object.keys(override?.style ?? {}).length > 0;
+      if (override?.variant || hasLocalStyle) continue;
+      const role =
+        node.role ??
+        (node.emphasis === 'primary' ? 'emphasis' : node.emphasis === 'muted' ? 'quiet' : '');
+      const hadStyle =
+        Object.keys({
+          ...doc.presentation.designSystem?.node,
+          ...doc.presentation.designSystem?.roles?.[role],
+          ...(node.style ?? {}),
+          ...(override?.style ?? {}),
+        }).length > 0;
+      doc.presentation.nodes[node.id] = { ...override, variant: hadStyle ? 'shape' : 'classic' };
+    }
+  }
   if (patch.title !== undefined) doc.title = patch.title;
   if (patch.description !== undefined) doc.description = patch.description;
   if (patch.layout) Object.assign(doc.layout, patch.layout);
@@ -288,6 +322,23 @@ export function patchDocument(input: Diagram, raw: unknown): Diagram {
     const map = new Map<string, Record<string, unknown>>(doc[key].map((n) => [n.id, { ...n }]));
     for (const item of patch[key] ?? []) {
       const prior = map.get(item.id);
+      const priorOverride = key === 'nodes' ? doc.presentation.nodes[item.id] : undefined;
+      const priorNodeRole =
+        (prior as Record<string, unknown> | undefined)?.role ??
+        ((prior as Record<string, unknown> | undefined)?.emphasis === 'primary'
+          ? 'emphasis'
+          : (prior as Record<string, unknown> | undefined)?.emphasis === 'muted'
+            ? 'quiet'
+            : '');
+      const priorHasStyle =
+        key === 'nodes'
+          ? Object.keys({
+              ...doc.presentation.designSystem?.node,
+              ...doc.presentation.designSystem?.roles?.[priorNodeRole as string],
+              ...((prior?.style as object) ?? {}),
+              ...((priorOverride?.style as object) ?? {}),
+            }).length > 0
+          : false;
       const next = { ...prior, ...item };
       for (const field of ['style', 'appearance', 'ports'] as const) {
         if (item[field] === null) {
@@ -299,12 +350,46 @@ export function patchDocument(input: Diagram, raw: unknown): Diagram {
             ...((prior?.[field] as Record<string, unknown>) ?? {}),
             ...(item[field] as Record<string, unknown>),
           };
-          for (const [key, value] of Object.entries(merged)) if (value === null) delete merged[key];
+          for (const [key, value] of Object.entries(item[field] as Record<string, unknown>))
+            if (value === null) delete merged[key];
           if (Object.keys(merged).length) next[field] = merged;
           else delete next[field];
         }
       }
+      for (const field of ['role', 'placement'] as const)
+        if (item[field] === null) delete next[field];
       if (next.path === null) delete next.path;
+      const shapeSelected =
+        item.style &&
+        typeof item.style === 'object' &&
+        (item.style as Record<string, unknown>).shape !== undefined &&
+        (item.style as Record<string, unknown>).shape !== null;
+      if (
+        key === 'nodes' &&
+        prior &&
+        (item.style !== undefined || item.role !== undefined) &&
+        (!priorOverride?.variant || shapeSelected)
+      ) {
+        const role =
+          (next.role as string | undefined) ??
+          ((next.emphasis as string) === 'primary'
+            ? 'emphasis'
+            : (next.emphasis as string) === 'muted'
+              ? 'quiet'
+              : '');
+        const nextHasStyle =
+          Object.keys({
+            ...doc.presentation.designSystem?.node,
+            ...doc.presentation.designSystem?.roles?.[role],
+            ...((next.style as object) ?? {}),
+            ...((priorOverride?.style as object) ?? {}),
+          }).length > 0;
+        if (shapeSelected || !priorHasStyle || !nextHasStyle)
+          doc.presentation.nodes[item.id] = {
+            ...priorOverride,
+            variant: shapeSelected ? 'shape' : priorHasStyle ? 'shape' : 'classic',
+          };
+      }
       map.set(item.id, next);
     }
     for (const keyToRemove of patch.remove?.[key] ?? []) map.delete(keyToRemove);
@@ -322,9 +407,44 @@ export function patchDocument(input: Diagram, raw: unknown): Diagram {
       continue;
     }
     const merged: Record<string, unknown> = { ...doc.presentation.nodes[key] };
+    const previousOverride = doc.presentation.nodes[key];
+    const shapeSelected =
+      value.style &&
+      typeof value.style === 'object' &&
+      (value.style as Record<string, unknown>).shape !== undefined &&
+      (value.style as Record<string, unknown>).shape !== null;
+    if (
+      value.style !== undefined &&
+      originalNodeIds.has(key) &&
+      (!previousOverride?.variant || shapeSelected)
+    ) {
+      const node = doc.nodes.find((candidate) => candidate.id === key);
+      if (node) {
+        const role =
+          node.role ??
+          (node.emphasis === 'primary' ? 'emphasis' : node.emphasis === 'muted' ? 'quiet' : '');
+        const hadStyle =
+          Object.keys({
+            ...doc.presentation.designSystem?.node,
+            ...doc.presentation.designSystem?.roles?.[role],
+            ...node.style,
+            ...previousOverride?.style,
+          }).length > 0;
+        merged.variant = shapeSelected ? 'shape' : hadStyle ? 'shape' : 'classic';
+      }
+    }
     for (const [k, v] of Object.entries(value)) {
       if (v === null) delete merged[k];
-      else merged[k] = k === 'style' ? { ...((merged[k] as object) ?? {}), ...(v as object) } : v;
+      else if (k === 'style' && v && typeof v === 'object') {
+        const style = { ...((merged.style as object) ?? {}), ...(v as object) } as Record<
+          string,
+          unknown
+        >;
+        for (const [styleKey, styleValue] of Object.entries(v as object))
+          if (styleValue === null) delete style[styleKey];
+        if (Object.keys(style).length) merged.style = style;
+        else delete merged.style;
+      } else merged[k] = v;
     }
     if (Object.keys(merged).length) doc.presentation.nodes[key] = merged as NodeOverride;
     else delete doc.presentation.nodes[key];
@@ -398,7 +518,7 @@ function hasV2Features(doc: Diagram): boolean {
     ) ||
     doc.edges.some((e) => e.appearance || e.role || e.path) ||
     doc.groups.some((g) => g.style || g.role) ||
-    Object.values(doc.presentation.nodes).some((n) => n.style)
+    Object.values(doc.presentation.nodes).some((n) => n.style || n.variant)
   );
 }
 /** Explicit, lossless upgrade. v1 files remain v1 until migration or use of a v2 feature. */

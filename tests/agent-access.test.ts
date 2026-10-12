@@ -10,6 +10,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createHostedServer } from '../packages/cli/src/hosted';
 import { createTokenStore } from '../packages/cli/src/agent-access';
+import { memoryBlobStore } from '../packages/cli/src/blob-store';
 import { remoteOrigin } from '../packages/cli/src/remote';
 const run = promisify(execFile),
   cli = resolve('packages/cli/bin.mjs');
@@ -107,6 +108,58 @@ test('agent REST, CLI, and HTTP/stdio MCP share ownership, scopes, revocation an
     const save = await request('/api/agent/document', auth(writer.token), body);
     const saved = await save.json();
     assert.equal(save.status, 200, saved.error);
+    const patch = { nodes: [{ id: 'service', description: 'Agent detail' }] };
+    const previewResponse = await request('/api/agent/document/preview', auth(writer.token), {
+      path: body.path,
+      revision: saved.revision,
+      patch,
+    });
+    const preview = await previewResponse.json();
+    assert.equal(previewResponse.status, 200, preview.error);
+    assert.equal(preview.summary.added, 1);
+    assert.equal(preview.diagnosticsStatus, 'notRun');
+    assert.deepEqual(preview.candidate.presentation.nodes.service, doc.presentation.nodes.service);
+    const invalidPreview = await request('/api/agent/document/preview', auth(writer.token), {
+      path: body.path,
+      revision: saved.revision,
+      patch: { nodes: [{ id: 'service', label: '' }] },
+    });
+    assert.equal(invalidPreview.status, 400);
+    assert.equal((await invalidPreview.json()).issues[0].path, 'nodes.0.label');
+    assert.equal(
+      (await (await request('/api/agent/document?path=' + body.path, auth(writer.token))).json())
+        .revision,
+      saved.revision,
+      'preview must not persist',
+    );
+    const appliedResponse = await request('/api/agent/document/apply', auth(writer.token), {
+      path: body.path,
+      revision: saved.revision,
+      patch,
+    });
+    const applied = await appliedResponse.json();
+    assert.equal(appliedResponse.status, 200, applied.error);
+    assert.equal(applied.applied, true);
+    assert.notEqual(applied.revision, saved.revision);
+    assert.equal(
+      (
+        await request('/api/agent/document/apply', auth(writer.token), {
+          path: body.path,
+          revision: saved.revision,
+          patch,
+        })
+      ).status,
+      409,
+      'stale apply must not overwrite',
+    );
+    const noop = await request('/api/agent/document/apply', auth(writer.token), {
+      path: body.path,
+      revision: applied.revision,
+      patch: {},
+    });
+    const noOpResult = await noop.json();
+    assert.equal(noOpResult.applied, false);
+    assert.equal(noOpResult.revision, applied.revision);
     assert.equal(
       (
         await request('/api/agent/document', auth(reader.token), {
@@ -144,7 +197,7 @@ test('agent REST, CLI, and HTTP/stdio MCP share ownership, scopes, revocation an
       }),
     );
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 5);
+    assert.equal(tools.tools.length, 7);
     const read = await client.callTool({
       name: 'forma_read_diagram',
       arguments: { path: body.path },
@@ -152,6 +205,16 @@ test('agent REST, CLI, and HTTP/stdio MCP share ownership, scopes, revocation an
     assert.ok(!read.isError);
     const value = JSON.parse((read.content as { text: string }[])[0].text);
     assert.deepEqual(value.document.presentation.nodes.service, doc.presentation.nodes.service);
+    const mcpPreview = await client.callTool({
+      name: 'forma_preview_patch',
+      arguments: {
+        path: body.path,
+        revision: value.revision,
+        patch: { nodes: [{ id: 'service', description: 'MCP preview' }] },
+      },
+    });
+    assert.ok(!mcpPreview.isError);
+    assert.match((mcpPreview.content as { text: string }[])[0].text, /candidateFingerprint/);
     assert.equal(
       (await client.callTool({ name: 'forma_write_diagram', arguments: body })).isError,
       true,
@@ -242,15 +305,80 @@ test('token registry survives reload, expires tokens and validates scopes', asyn
       days: 1,
     });
     const loaded = await createTokenStore(temp, () => now);
-    assert.equal(loaded.authenticate('Bearer ' + created.token).identity.sub, 'alice');
+    assert.equal((await loaded.authenticate('Bearer ' + created.token)).identity.sub, 'alice');
     for (const folder of ['../all', '/all', 'team/', 'team//private', '.hidden', 'team/../x'])
       await assert.rejects(
         store.create(identity, { name: 'Bad', permission: 'write', folder, days: 1 }),
       );
     now += 86400001;
-    assert.throws(() => loaded.authenticate('Bearer ' + created.token), /unexpired/);
+    await assert.rejects(loaded.authenticate('Bearer ' + created.token), /unexpired/);
     assert.throws(() => remoteOrigin('https://user:secret@example.com'), /HTTPS origin/);
     assert.throws(() => remoteOrigin('http://public.example'), /HTTPS origin/);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test('independent token stores serialize concurrent mutations and observe revocation immediately', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'forma-token-cas-'));
+  try {
+    const identity = { sub: 'alice', email: 'alice@example.test', email_verified: true };
+    const one = await createTokenStore(temp),
+      two = await createTokenStore(temp);
+    const [first, second] = await Promise.all([
+      one.create(identity, { name: 'First', permission: 'write', days: 1 }),
+      two.create(identity, { name: 'Second', permission: 'read', days: 1 }),
+    ]);
+    assert.equal((await one.list(identity)).length, 2);
+    await assert.doesNotReject(two.authenticate(`Bearer ${first.token}`));
+    const [, third] = await Promise.all([
+      one.revoke(identity, first.id),
+      two.create(identity, { name: 'Third', permission: 'read', days: 1 }),
+    ]);
+    await assert.rejects(two.authenticate(`Bearer ${first.token}`), /valid, unexpired/);
+    await assert.doesNotReject(two.authenticate(`Bearer ${second.token}`));
+    await assert.doesNotReject(one.authenticate(`Bearer ${third.token}`));
+    assert.equal((await one.list(identity)).length, 2);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test('independent token stores use the shared Blob CAS as authoritative auth state', async () => {
+  const blobs = memoryBlobStore();
+  const io = {
+    async load() {
+      const value = await blobs.get('agent-tokens.json');
+      return value ? { text: value.text, version: value.etag } : null;
+    },
+    async save(text: string, expectedVersion: string | null) {
+      return blobs.putIfMatch('agent-tokens.json', text, expectedVersion);
+    },
+  };
+  const identity = { sub: 'alice', email: 'alice@example.test', email_verified: true };
+  const warmA = await createTokenStore(io),
+    warmB = await createTokenStore(io);
+  const grant = await warmA.create(identity, {
+    name: 'Remote worker',
+    permission: 'write',
+    days: 1,
+  });
+  await assert.doesNotReject(warmB.authenticate(`Bearer ${grant.token}`));
+  await warmA.revoke(identity, grant.id);
+  await assert.rejects(warmB.authenticate(`Bearer ${grant.token}`), /valid, unexpired/);
+});
+
+test('filesystem token registry never removes a lock that may be live after a crash', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'forma-token-lock-'));
+  try {
+    const identity = { sub: 'alice', email: 'alice@example.test', email_verified: true };
+    await writeFile(join(temp, '.agent-tokens.lock'), 'other writer');
+    const store = await createTokenStore(temp);
+    await assert.rejects(
+      store.create(identity, { name: 'Agent', permission: 'read', days: 1 }),
+      /Do not remove \.agent-tokens\.lock until you have verified/,
+    );
+    assert.equal(await readFile(join(temp, '.agent-tokens.lock'), 'utf8'), 'other writer');
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

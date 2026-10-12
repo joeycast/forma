@@ -11,8 +11,10 @@ export function Dialogs({
   commit,
   notify,
   children,
+  returnFocus,
 }: {
   children?: ReactNode;
+  returnFocus?: HTMLElement | null;
   modal: string;
   close: () => void;
   doc: Diagram;
@@ -24,10 +26,14 @@ export function Dialogs({
     : setupPrompt;
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
+    const previous = returnFocus?.isConnected
+      ? returnFocus
+      : (document.activeElement as HTMLElement | null);
     dialogRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
-    return () => previous?.focus();
-  }, []);
+    return () => {
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [returnFocus]);
   const [source, setSource] = useState(serializeDocument(doc)),
     [error, setError] = useState(''),
     [copied, setCopied] = useState(false);
@@ -37,18 +43,25 @@ export function Dialogs({
         className={`modal ${modal === 'source' ? 'source-modal' : ''}`}
         ref={dialogRef}
         onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            close();
+            return;
+          }
           if (event.key !== 'Tab') return;
           const controls = [
             ...(dialogRef.current?.querySelectorAll<HTMLElement>(
-              'button:not(:disabled), textarea, input, select, a[href]',
+              'button:not(:disabled), textarea:not(:disabled), input:not(:disabled), select:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
             ) ?? []),
-          ];
+          ].filter((control) => control.getClientRects().length > 0 && control.tabIndex >= 0);
           const first = controls[0],
             last = controls.at(-1);
-          if (event.shiftKey && document.activeElement === first) {
+          const focusOutsideDialog = !dialogRef.current?.contains(document.activeElement);
+          if (event.shiftKey && (document.activeElement === first || focusOutsideDialog)) {
             event.preventDefault();
             last?.focus();
-          } else if (!event.shiftKey && document.activeElement === last) {
+          } else if (!event.shiftKey && (document.activeElement === last || focusOutsideDialog)) {
             event.preventDefault();
             first?.focus();
           }
@@ -70,6 +83,18 @@ export function Dialogs({
             </div>
             <h2 id="modal-title">A good place to start.</h2>
             <p>Thoughtful foundations for your next big idea.</p>
+            <button
+              className="secondary full"
+              onClick={() => {
+                commit(
+                  parseDocument({ version: 2, title: 'Untitled diagram', nodes: [], edges: [] }),
+                );
+                close();
+                notify('A blank canvas, ready for your ideas.');
+              }}
+            >
+              <Workflow size={16} /> Start with a blank diagram
+            </button>
             <div className="template-grid">
               <button
                 onClick={() => {
@@ -140,19 +165,6 @@ export function Dialogs({
                 Starting points, not diagram categories. Every example uses the same primitives.
               </p>
             </div>
-            <button
-              className="secondary full"
-              onClick={() => {
-                commit(
-                  parseDocument({ version: 2, title: 'Untitled diagram', nodes: [], edges: [] }),
-                );
-                close();
-                notify('A blank canvas, ready for your ideas.');
-              }}
-            >
-              <Workflow size={16} />
-              Start with a blank diagram
-            </button>
           </>
         ) : modal === 'source' ? (
           <>

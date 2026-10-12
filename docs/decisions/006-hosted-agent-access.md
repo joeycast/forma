@@ -18,6 +18,8 @@ Agent HTTP routes (`/api/agent/*` and `/mcp`) require `Authorization: Bearer`. A
 
 `forma remote` talks to the hosted origin from `FORMA_REMOTE_URL`. The token comes from `FORMA_AGENT_TOKEN` or a private `FORMA_AGENT_TOKEN_FILE` (regular file, ≤4 KB, mode `0600` on Unix). Pull writes a `.forma-remote.json` sidecar binding server, owner, path, and content revision. Push refuses to cross that binding and uses the same optimistic revision check as human saves.
 
+`POST /api/agent/document/preview` accepts `{path,revision,patch}` and returns an ID-addressed native field diff and candidate without saving. Its `diagnosticsStatus` is `notRun`: schema and document invariants are validated, while visual layout inspection is not performed. `POST /api/agent/document/apply` recomputes the patch against the stored base and uses the supplied revision as the save condition. Conflicts return 409 and must be reconciled after a fresh read. `forma patch FILE --patch changes.json --dry-run` offers the same shared native patch semantics for a local file without writing it. MCP exposes `forma_preview_patch` and `forma_apply_patch` over the same token scope checks.
+
 `forma mcp` is a local stdio bridge over that HTTP API. Streamable HTTP MCP at `/mcp` is off unless `FORMA_ENABLE_MCP=true`. This release uses configured bearer tokens rather than MCP OAuth discovery.
 
 ## Remaining work
